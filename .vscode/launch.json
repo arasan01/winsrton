@@ -1,0 +1,28 @@
+{
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "sourceLanguages": [
+        "swift"
+      ],
+      "args": [],
+      "cwd": "${workspaceFolder:winsrton}",
+      "name": "Debug winsrton",
+      "program": "${workspaceFolder:winsrton}\\.build\\debug\\winsrton.exe",
+      "preLaunchTask": "swift: Build Debug winsrton"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "sourceLanguages": [
+        "swift"
+      ],
+      "args": [],
+      "cwd": "${workspaceFolder:winsrton}",
+      "name": "Release winsrton",
+      "program": "${workspaceFolder:winsrton}\\.build\\release\\winsrton.exe",
+      "preLaunchTask": "swift: Build Release winsrton"
+    }
+  ]
+}
