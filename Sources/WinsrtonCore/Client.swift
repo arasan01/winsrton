@@ -1,6 +1,8 @@
 import Foundation
+import Parsing
+
 #if canImport(FoundationNetworking)
-import FoundationNetworking
+  import FoundationNetworking
 #endif
 
 extension URLSession {
@@ -20,870 +22,175 @@ extension URLSession {
   }
 }
 
+public enum DiagnosticError: LocalizedError {
+  case NotFoundProjectionFile(String)
+  case FailedParsingProjectionFile(String)
+  case FailedOutputXMLFile
+  case FailedToRestoreNugetPackage(String)
+  case FailedToSwiftWinRT(String)
+
+  public var errorDescription: String? {
+    switch self {
+    case .NotFoundProjectionFile(let path):
+      return "The projection file at \(path) was not found"
+    case .FailedParsingProjectionFile(let errorDescription):
+      return "The projection file is failed parse: \(errorDescription)"
+    case .FailedOutputXMLFile:
+      return "Failed to output XML file"
+    case .FailedToRestoreNugetPackage(let errorDescription):
+      return "Failed to restore nuget package: \(errorDescription)"
+    case .FailedToSwiftWinRT(let errorDescription):
+      return "Failed to invoke swift-winrt: \(errorDescription)"
+    }
+  }
+}
+
 public actor GenerateBindings {
 
   public init() {}
 
   public func generateBindingFile() throws {
-    let text = #"""
-    # Dependencies
-
-    - id: swift-winrt
-      version: 0.5.0
-    - id: Microsoft.Windows.SDK.Contracts
-      version: 10.0.18362.2005
-    - id: Microsoft.WindowsAppSDK
-      version: 1.5.240205001-preview1
-    - id: Microsoft.Graphics.Win2D
-      version: 1.1.1
-
-    # Include
-
-    - [ ] Microsoft.Graphics.Canvas.Brushes.h
-    - [ ] Microsoft.Graphics.Canvas.Effects.h
-    - [ ] Microsoft.Graphics.Canvas.Geometry.h
-    - [ ] Microsoft.Graphics.Canvas.h
-    - [ ] Microsoft.Graphics.Canvas.Printing.h
-    - [ ] Microsoft.Graphics.Canvas.Svg.h
-    - [ ] Microsoft.Graphics.Canvas.Text.h
-    - [ ] Microsoft.Graphics.Canvas.UI.Composition.h
-    - [ ] Microsoft.Graphics.Canvas.UI.h
-    - [ ] Microsoft.Graphics.Canvas.UI.Xaml.h
-    - [ ] Microsoft.Graphics.DirectX.h
-    - [ ] Microsoft.Graphics.Display.h
-    - [ ] Microsoft.UI.Composition.Core.h
-    - [ ] Microsoft.UI.Composition.Diagnostics.h
-    - [ ] Microsoft.UI.Composition.Effects.h
-    - [ ] Microsoft.UI.Composition.h
-    - [ ] Microsoft.UI.Composition.Interactions.h
-    - [ ] Microsoft.UI.Composition.Scenes.h
-    - [ ] Microsoft.UI.Composition.SystemBackdrops.h
-    - [ ] Microsoft.UI.Content.h
-    - [ ] Microsoft.UI.Dispatching.h
-    - [ ] Microsoft.UI.h
-    - [ ] Microsoft.UI.Input.DragDrop.h
-    - [ ] Microsoft.UI.Input.h
-    - [ ] Microsoft.UI.Input.Interop.h
-    - [ ] Microsoft.UI.System.h
-    - [ ] Microsoft.UI.Text.h
-    - [ ] Microsoft.UI.Windowing.h
-    - [ ] Microsoft.UI.Xaml.Automation.h
-    - [ ] Microsoft.UI.Xaml.Automation.Peers.h
-    - [ ] Microsoft.UI.Xaml.Automation.Provider.h
-    - [ ] Microsoft.UI.Xaml.Automation.Text.h
-    - [ ] Microsoft.UI.Xaml.Controls.AnimatedVisuals.h
-    - [ ] Microsoft.UI.Xaml.Controls.h
-    - [ ] Microsoft.UI.Xaml.Controls.Primitives.h
-    - [ ] Microsoft.UI.Xaml.Data.h
-    - [ ] Microsoft.UI.Xaml.Documents.h
-    - [ ] Microsoft.UI.Xaml.h
-    - [ ] Microsoft.UI.Xaml.Hosting.h
-    - [ ] Microsoft.UI.Xaml.Input.h
-    - [ ] Microsoft.UI.Xaml.Interop.h
-    - [ ] Microsoft.UI.Xaml.Markup.h
-    - [ ] Microsoft.UI.Xaml.Media.Animation.h
-    - [ ] Microsoft.UI.Xaml.Media.h
-    - [ ] Microsoft.UI.Xaml.Media.Imaging.h
-    - [ ] Microsoft.UI.Xaml.Media.Media3D.h
-    - [ ] Microsoft.UI.Xaml.Navigation.h
-    - [ ] Microsoft.UI.Xaml.Printing.h
-    - [ ] Microsoft.UI.Xaml.Resources.h
-    - [ ] Microsoft.UI.Xaml.Shapes.h
-    - [ ] Microsoft.UI.Xaml.XamlTypeInfo.h
-    - [ ] Microsoft.Web.WebView2.Core.h
-    - [ ] Microsoft.Windows.ApplicationModel.DynamicDependency.h
-    - [ ] Microsoft.Windows.ApplicationModel.Resources.h
-    - [ ] Microsoft.Windows.ApplicationModel.WindowsAppRuntime.h
-    - [ ] Microsoft.Windows.AppLifecycle.h
-    - [ ] Microsoft.Windows.AppNotifications.Builder.h
-    - [ ] Microsoft.Windows.AppNotifications.h
-    - [ ] Microsoft.Windows.Management.Deployment.h
-    - [ ] Microsoft.Windows.PushNotifications.h
-    - [ ] Microsoft.Windows.Security.AccessControl.h
-    - [ ] Microsoft.Windows.System.h
-    - [ ] Microsoft.Windows.System.Power.h
-    - [ ] Microsoft.Windows.Widgets.Feeds.Providers.h
-    - [ ] Microsoft.Windows.Widgets.h
-    - [ ] Microsoft.Windows.Widgets.Providers.h
-    - [ ] Windows.AI.MachineLearning.h
-    - [ ] Windows.AI.MachineLearning.Preview.h
-    - [ ] Windows.ApplicationModel.Activation.h
-    - [ ] Windows.ApplicationModel.AppExtensions.h
-    - [ ] Windows.ApplicationModel.Appointments.AppointmentsProvider.h
-    - [ ] Windows.ApplicationModel.Appointments.DataProvider.h
-    - [ ] Windows.ApplicationModel.Appointments.h
-    - [ ] Windows.ApplicationModel.AppService.h
-    - [ ] Windows.ApplicationModel.Background.h
-    - [ ] Windows.ApplicationModel.Calls.Background.h
-    - [ ] Windows.ApplicationModel.Calls.h
-    - [ ] Windows.ApplicationModel.Calls.Provider.h
-    - [ ] Windows.ApplicationModel.Chat.h
-    - [ ] Windows.ApplicationModel.CommunicationBlocking.h
-    - [ ] Windows.ApplicationModel.Contacts.DataProvider.h
-    - [ ] Windows.ApplicationModel.Contacts.h
-    - [ ] Windows.ApplicationModel.Contacts.Provider.h
-    - [ ] Windows.ApplicationModel.ConversationalAgent.h
-    - [ ] Windows.ApplicationModel.Core.h
-    - [ ] Windows.ApplicationModel.DataTransfer.DragDrop.Core.h
-    - [ ] Windows.ApplicationModel.DataTransfer.DragDrop.h
-    - [ ] Windows.ApplicationModel.DataTransfer.h
-    - [ ] Windows.ApplicationModel.DataTransfer.ShareTarget.h
-    - [ ] Windows.ApplicationModel.Email.DataProvider.h
-    - [ ] Windows.ApplicationModel.Email.h
-    - [ ] Windows.ApplicationModel.ExtendedExecution.Foreground.h
-    - [ ] Windows.ApplicationModel.ExtendedExecution.h
-    - [ ] Windows.ApplicationModel.h
-    - [ ] Windows.ApplicationModel.LockScreen.h
-    - [ ] Windows.ApplicationModel.Payments.h
-    - [ ] Windows.ApplicationModel.Payments.Provider.h
-    - [ ] Windows.ApplicationModel.Preview.Holographic.h
-    - [ ] Windows.ApplicationModel.Preview.InkWorkspace.h
-    - [ ] Windows.ApplicationModel.Preview.Notes.h
-    - [ ] Windows.ApplicationModel.Resources.Core.h
-    - [ ] Windows.ApplicationModel.Resources.h
-    - [ ] Windows.ApplicationModel.Resources.Management.h
-    - [ ] Windows.ApplicationModel.Search.Core.h
-    - [ ] Windows.ApplicationModel.Search.h
-    - [ ] Windows.ApplicationModel.SocialInfo.h
-    - [ ] Windows.ApplicationModel.SocialInfo.Provider.h
-    - [ ] Windows.ApplicationModel.Store.h
-    - [ ] Windows.ApplicationModel.Store.LicenseManagement.h
-    - [ ] Windows.ApplicationModel.Store.Preview.h
-    - [ ] Windows.ApplicationModel.Store.Preview.InstallControl.h
-    - [ ] Windows.ApplicationModel.UserActivities.Core.h
-    - [ ] Windows.ApplicationModel.UserActivities.h
-    - [ ] Windows.ApplicationModel.UserDataAccounts.h
-    - [ ] Windows.ApplicationModel.UserDataAccounts.Provider.h
-    - [ ] Windows.ApplicationModel.UserDataAccounts.SystemAccess.h
-    - [ ] Windows.ApplicationModel.UserDataTasks.DataProvider.h
-    - [ ] Windows.ApplicationModel.UserDataTasks.h
-    - [ ] Windows.ApplicationModel.VoiceCommands.h
-    - [ ] Windows.ApplicationModel.Wallet.h
-    - [ ] Windows.ApplicationModel.Wallet.System.h
-    - [ ] Windows.Data.Html.h
-    - [ ] Windows.Data.Json.h
-    - [ ] Windows.Data.Pdf.h
-    - [ ] Windows.Data.Text.h
-    - [ ] Windows.Data.Xml.Dom.h
-    - [ ] Windows.Data.Xml.Xsl.h
-    - [ ] Windows.Devices.Adc.h
-    - [ ] Windows.Devices.Adc.Provider.h
-    - [ ] Windows.Devices.AllJoyn.h
-    - [ ] Windows.Devices.Background.h
-    - [ ] Windows.Devices.Bluetooth.Advertisement.h
-    - [ ] Windows.Devices.Bluetooth.Background.h
-    - [ ] Windows.Devices.Bluetooth.GenericAttributeProfile.h
-    - [ ] Windows.Devices.Bluetooth.h
-    - [ ] Windows.Devices.Bluetooth.Rfcomm.h
-    - [ ] Windows.Devices.Custom.h
-    - [ ] Windows.Devices.Display.Core.h
-    - [ ] Windows.Devices.Display.h
-    - [ ] Windows.Devices.Enumeration.h
-    - [ ] Windows.Devices.Enumeration.Pnp.h
-    - [ ] Windows.Devices.Geolocation.Geofencing.h
-    - [ ] Windows.Devices.Geolocation.h
-    - [ ] Windows.Devices.Gpio.h
-    - [ ] Windows.Devices.Gpio.Provider.h
-    - [ ] Windows.Devices.h
-    - [ ] Windows.Devices.Haptics.h
-    - [ ] Windows.Devices.HumanInterfaceDevice.h
-    - [ ] Windows.Devices.I2c.h
-    - [ ] Windows.Devices.I2c.Provider.h
-    - [ ] Windows.Devices.Input.h
-    - [ ] Windows.Devices.Input.Preview.h
-    - [ ] Windows.Devices.Lights.Effects.h
-    - [ ] Windows.Devices.Lights.h
-    - [ ] Windows.Devices.Midi.h
-    - [ ] Windows.Devices.Perception.h
-    - [ ] Windows.Devices.Perception.Provider.h
-    - [ ] Windows.Devices.PointOfService.h
-    - [ ] Windows.Devices.PointOfService.Provider.h
-    - [ ] Windows.Devices.Portable.h
-    - [ ] Windows.Devices.Power.h
-    - [ ] Windows.Devices.Printers.Extensions.h
-    - [ ] Windows.Devices.Printers.h
-    - [ ] Windows.Devices.Pwm.h
-    - [ ] Windows.Devices.Pwm.Provider.h
-    - [ ] Windows.Devices.Radios.h
-    - [ ] Windows.Devices.Scanners.h
-    - [ ] Windows.Devices.Sensors.Custom.h
-    - [ ] Windows.Devices.Sensors.h
-    - [ ] Windows.Devices.SerialCommunication.h
-    - [ ] Windows.Devices.SmartCards.h
-    - [ ] Windows.Devices.Sms.h
-    - [ ] Windows.Devices.Spi.h
-    - [ ] Windows.Devices.Spi.Provider.h
-    - [ ] Windows.Devices.Usb.h
-    - [ ] Windows.Devices.WiFi.h
-    - [ ] Windows.Devices.WiFiDirect.h
-    - [ ] Windows.Devices.WiFiDirect.Services.h
-    - [ ] Windows.Embedded.DeviceLockdown.h
-    - [ ] Windows.Foundation.Collections.h
-    - [ ] Windows.Foundation.Diagnostics.h
-    - [ ] Windows.Foundation.h
-    - [ ] Windows.Foundation.Metadata.h
-    - [ ] Windows.Foundation.Numerics.h
-    - [ ] Windows.Gaming.Input.Custom.h
-    - [ ] Windows.Gaming.Input.ForceFeedback.h
-    - [ ] Windows.Gaming.Input.h
-    - [ ] Windows.Gaming.Input.Preview.h
-    - [ ] Windows.Gaming.Preview.GamesEnumeration.h
-    - [ ] Windows.Gaming.UI.h
-    - [ ] Windows.Gaming.XboxLive.Storage.h
-    - [ ] Windows.Globalization.Collation.h
-    - [ ] Windows.Globalization.DateTimeFormatting.h
-    - [ ] Windows.Globalization.Fonts.h
-    - [ ] Windows.Globalization.h
-    - [ ] Windows.Globalization.NumberFormatting.h
-    - [ ] Windows.Globalization.PhoneNumberFormatting.h
-    - [ ] Windows.Graphics.Capture.h
-    - [ ] Windows.Graphics.DirectX.Direct3D11.h
-    - [ ] Windows.Graphics.DirectX.h
-    - [ ] Windows.Graphics.Display.Core.h
-    - [ ] Windows.Graphics.Display.h
-    - [ ] Windows.Graphics.Effects.h
-    - [ ] Windows.Graphics.h
-    - [ ] Windows.Graphics.Holographic.h
-    - [ ] Windows.Graphics.Imaging.h
-    - [ ] Windows.Graphics.Printing.h
-    - [ ] Windows.Graphics.Printing.OptionDetails.h
-    - [ ] Windows.Graphics.Printing.PrintTicket.h
-    - [ ] Windows.Graphics.Printing.Workflow.h
-    - [ ] Windows.Graphics.Printing3D.h
-    - [ ] Windows.Management.Core.h
-    - [ ] Windows.Management.Deployment.h
-    - [ ] Windows.Management.Deployment.Preview.h
-    - [ ] Windows.Management.h
-    - [ ] Windows.Management.Policies.h
-    - [ ] Windows.Management.Update.h
-    - [ ] Windows.Management.Workplace.h
-    - [ ] Windows.Media.AppBroadcasting.h
-    - [ ] Windows.Media.AppRecording.h
-    - [ ] Windows.Media.Audio.h
-    - [ ] Windows.Media.Capture.Core.h
-    - [ ] Windows.Media.Capture.Frames.h
-    - [ ] Windows.Media.Capture.h
-    - [ ] Windows.Media.Casting.h
-    - [ ] Windows.Media.ClosedCaptioning.h
-    - [ ] Windows.Media.ContentRestrictions.h
-    - [ ] Windows.Media.Control.h
-    - [ ] Windows.Media.Core.h
-    - [ ] Windows.Media.Core.Preview.h
-    - [ ] Windows.Media.Devices.Core.h
-    - [ ] Windows.Media.Devices.h
-    - [ ] Windows.Media.DialProtocol.h
-    - [ ] Windows.Media.Editing.h
-    - [ ] Windows.Media.Effects.h
-    - [ ] Windows.Media.FaceAnalysis.h
-    - [ ] Windows.Media.h
-    - [ ] Windows.Media.Import.h
-    - [ ] Windows.Media.MediaProperties.h
-    - [ ] Windows.Media.Miracast.h
-    - [ ] Windows.Media.Ocr.h
-    - [ ] Windows.Media.Playback.h
-    - [ ] Windows.Media.Playlists.h
-    - [ ] Windows.Media.PlayTo.h
-    - [ ] Windows.Media.Protection.h
-    - [ ] Windows.Media.Protection.PlayReady.h
-    - [ ] Windows.Media.Render.h
-    - [ ] Windows.Media.SpeechRecognition.h
-    - [ ] Windows.Media.SpeechSynthesis.h
-    - [ ] Windows.Media.Streaming.Adaptive.h
-    - [ ] Windows.Media.Transcoding.h
-    - [ ] Windows.Networking.BackgroundTransfer.h
-    - [ ] Windows.Networking.Connectivity.h
-    - [ ] Windows.Networking.h
-    - [ ] Windows.Networking.NetworkOperators.h
-    - [ ] Windows.Networking.Proximity.h
-    - [ ] Windows.Networking.PushNotifications.h
-    - [ ] Windows.Networking.ServiceDiscovery.Dnssd.h
-    - [ ] Windows.Networking.Sockets.h
-    - [ ] Windows.Networking.Vpn.h
-    - [ ] Windows.Networking.XboxLive.h
-    - [ ] Windows.Perception.Automation.Core.h
-    - [ ] Windows.Perception.h
-    - [ ] Windows.Perception.People.h
-    - [ ] Windows.Perception.Spatial.h
-    - [ ] Windows.Perception.Spatial.Preview.h
-    - [ ] Windows.Perception.Spatial.Surfaces.h
-    - [ ] Windows.Phone.ApplicationModel.h
-    - [ ] Windows.Phone.Devices.Notification.h
-    - [ ] Windows.Phone.Devices.Power.h
-    - [ ] Windows.Phone.Management.Deployment.h
-    - [ ] Windows.Phone.Media.Devices.h
-    - [ ] Windows.Phone.Notification.Management.h
-    - [ ] Windows.Phone.PersonalInformation.h
-    - [ ] Windows.Phone.PersonalInformation.Provisioning.h
-    - [ ] Windows.Phone.Speech.Recognition.h
-    - [ ] Windows.Phone.StartScreen.h
-    - [ ] Windows.Phone.System.h
-    - [ ] Windows.Phone.System.Power.h
-    - [ ] Windows.Phone.System.Profile.h
-    - [ ] Windows.Phone.System.UserProfile.GameServices.Core.h
-    - [ ] Windows.Phone.UI.Input.h
-    - [ ] Windows.Security.Authentication.Identity.Core.h
-    - [ ] Windows.Security.Authentication.Identity.h
-    - [ ] Windows.Security.Authentication.Identity.Provider.h
-    - [ ] Windows.Security.Authentication.OnlineId.h
-    - [ ] Windows.Security.Authentication.Web.Core.h
-    - [ ] Windows.Security.Authentication.Web.h
-    - [ ] Windows.Security.Authentication.Web.Provider.h
-    - [ ] Windows.Security.Authorization.AppCapabilityAccess.h
-    - [ ] Windows.Security.Credentials.h
-    - [ ] Windows.Security.Credentials.UI.h
-    - [ ] Windows.Security.Cryptography.Certificates.h
-    - [ ] Windows.Security.Cryptography.Core.h
-    - [ ] Windows.Security.Cryptography.DataProtection.h
-    - [ ] Windows.Security.Cryptography.h
-    - [ ] Windows.Security.DataProtection.h
-    - [ ] Windows.Security.EnterpriseData.h
-    - [ ] Windows.Security.ExchangeActiveSyncProvisioning.h
-    - [ ] Windows.Services.Cortana.h
-    - [ ] Windows.Services.Maps.Guidance.h
-    - [ ] Windows.Services.Maps.h
-    - [ ] Windows.Services.Maps.LocalSearch.h
-    - [ ] Windows.Services.Maps.OfflineMaps.h
-    - [ ] Windows.Services.Store.h
-    - [ ] Windows.Services.TargetedContent.h
-    - [ ] Windows.Storage.AccessCache.h
-    - [ ] Windows.Storage.BulkAccess.h
-    - [ ] Windows.Storage.Compression.h
-    - [ ] Windows.Storage.FileProperties.h
-    - [ ] Windows.Storage.h
-    - [ ] Windows.Storage.Pickers.h
-    - [ ] Windows.Storage.Pickers.Provider.h
-    - [ ] Windows.Storage.Provider.h
-    - [ ] Windows.Storage.Search.h
-    - [ ] Windows.Storage.Streams.h
-    - [ ] Windows.System.Diagnostics.DevicePortal.h
-    - [ ] Windows.System.Diagnostics.h
-    - [ ] Windows.System.Diagnostics.Telemetry.h
-    - [ ] Windows.System.Diagnostics.TraceReporting.h
-    - [ ] Windows.System.Display.h
-    - [ ] Windows.System.h
-    - [ ] Windows.System.Inventory.h
-    - [ ] Windows.System.Power.Diagnostics.h
-    - [ ] Windows.System.Power.h
-    - [ ] Windows.System.Preview.h
-    - [ ] Windows.System.Profile.h
-    - [ ] Windows.System.Profile.SystemManufacturers.h
-    - [ ] Windows.System.RemoteDesktop.h
-    - [ ] Windows.System.RemoteSystems.h
-    - [ ] Windows.System.Threading.Core.h
-    - [ ] Windows.System.Threading.h
-    - [ ] Windows.System.Update.h
-    - [ ] Windows.System.UserProfile.h
-    - [ ] Windows.UI.Accessibility.h
-    - [ ] Windows.UI.ApplicationSettings.h
-    - [ ] Windows.UI.Composition.Core.h
-    - [ ] Windows.UI.Composition.Desktop.h
-    - [ ] Windows.UI.Composition.Diagnostics.h
-    - [ ] Windows.UI.Composition.Effects.h
-    - [ ] Windows.UI.Composition.h
-    - [ ] Windows.UI.Composition.Interactions.h
-    - [ ] Windows.UI.Composition.Scenes.h
-    - [ ] Windows.UI.Core.AnimationMetrics.h
-    - [ ] Windows.UI.Core.h
-    - [ ] Windows.UI.Core.Preview.h
-    - [ ] Windows.UI.h
-    - [ ] Windows.UI.Input.Core.h
-    - [ ] Windows.UI.Input.h
-    - [ ] Windows.UI.Input.Inking.Analysis.h
-    - [ ] Windows.UI.Input.Inking.Core.h
-    - [ ] Windows.UI.Input.Inking.h
-    - [ ] Windows.UI.Input.Inking.Preview.h
-    - [ ] Windows.UI.Input.Preview.h
-    - [ ] Windows.UI.Input.Preview.Injection.h
-    - [ ] Windows.UI.Input.Spatial.h
-    - [ ] Windows.UI.Notifications.h
-    - [ ] Windows.UI.Notifications.Management.h
-    - [ ] Windows.UI.Popups.h
-    - [ ] Windows.UI.Shell.h
-    - [ ] Windows.UI.StartScreen.h
-    - [ ] Windows.UI.Text.Core.h
-    - [ ] Windows.UI.Text.h
-    - [ ] Windows.UI.ViewManagement.Core.h
-    - [ ] Windows.UI.ViewManagement.h
-    - [ ] Windows.UI.WebUI.Core.h
-    - [ ] Windows.UI.WebUI.h
-    - [ ] Windows.UI.WindowManagement.h
-    - [ ] Windows.UI.WindowManagement.Preview.h
-    - [ ] Windows.UI.Xaml.Automation.h
-    - [ ] Windows.UI.Xaml.Automation.Peers.h
-    - [ ] Windows.UI.Xaml.Automation.Provider.h
-    - [ ] Windows.UI.Xaml.Automation.Text.h
-    - [ ] Windows.UI.Xaml.Controls.h
-    - [ ] Windows.UI.Xaml.Controls.Maps.h
-    - [ ] Windows.UI.Xaml.Controls.Primitives.h
-    - [ ] Windows.UI.Xaml.Core.Direct.h
-    - [ ] Windows.UI.Xaml.Data.h
-    - [ ] Windows.UI.Xaml.Documents.h
-    - [ ] Windows.UI.Xaml.h
-    - [ ] Windows.UI.Xaml.Hosting.h
-    - [ ] Windows.UI.Xaml.Input.h
-    - [ ] Windows.UI.Xaml.Interop.h
-    - [ ] Windows.UI.Xaml.Markup.h
-    - [ ] Windows.UI.Xaml.Media.Animation.h
-    - [ ] Windows.UI.Xaml.Media.h
-    - [ ] Windows.UI.Xaml.Media.Imaging.h
-    - [ ] Windows.UI.Xaml.Media.Media3D.h
-    - [ ] Windows.UI.Xaml.Navigation.h
-    - [ ] Windows.UI.Xaml.Printing.h
-    - [ ] Windows.UI.Xaml.Resources.h
-    - [ ] Windows.UI.Xaml.Shapes.h
-    - [ ] Windows.Web.AtomPub.h
-    - [ ] Windows.Web.h
-    - [ ] Windows.Web.Http.Diagnostics.h
-    - [ ] Windows.Web.Http.Filters.h
-    - [ ] Windows.Web.Http.h
-    - [ ] Windows.Web.Http.Headers.h
-    - [ ] Windows.Web.Syndication.h
-    - [ ] Windows.Web.UI.h
-    - [ ] Windows.Web.UI.Interop.h
-
-    # Exclude
-
-    - [ ] Microsoft.Graphics.Canvas.Brushes.h
-    - [ ] Microsoft.Graphics.Canvas.Effects.h
-    - [ ] Microsoft.Graphics.Canvas.Geometry.h
-    - [ ] Microsoft.Graphics.Canvas.h
-    - [ ] Microsoft.Graphics.Canvas.Printing.h
-    - [ ] Microsoft.Graphics.Canvas.Svg.h
-    - [ ] Microsoft.Graphics.Canvas.Text.h
-    - [ ] Microsoft.Graphics.Canvas.UI.Composition.h
-    - [ ] Microsoft.Graphics.Canvas.UI.h
-    - [ ] Microsoft.Graphics.Canvas.UI.Xaml.h
-    - [ ] Microsoft.Graphics.DirectX.h
-    - [ ] Microsoft.Graphics.Display.h
-    - [ ] Microsoft.UI.Composition.Core.h
-    - [ ] Microsoft.UI.Composition.Diagnostics.h
-    - [ ] Microsoft.UI.Composition.Effects.h
-    - [ ] Microsoft.UI.Composition.h
-    - [ ] Microsoft.UI.Composition.Interactions.h
-    - [ ] Microsoft.UI.Composition.Scenes.h
-    - [ ] Microsoft.UI.Composition.SystemBackdrops.h
-    - [ ] Microsoft.UI.Content.h
-    - [ ] Microsoft.UI.Dispatching.h
-    - [ ] Microsoft.UI.h
-    - [ ] Microsoft.UI.Input.DragDrop.h
-    - [ ] Microsoft.UI.Input.h
-    - [ ] Microsoft.UI.Input.Interop.h
-    - [ ] Microsoft.UI.System.h
-    - [ ] Microsoft.UI.Text.h
-    - [ ] Microsoft.UI.Windowing.h
-    - [ ] Microsoft.UI.Xaml.Automation.h
-    - [ ] Microsoft.UI.Xaml.Automation.Peers.h
-    - [ ] Microsoft.UI.Xaml.Automation.Provider.h
-    - [ ] Microsoft.UI.Xaml.Automation.Text.h
-    - [ ] Microsoft.UI.Xaml.Controls.AnimatedVisuals.h
-    - [ ] Microsoft.UI.Xaml.Controls.h
-    - [ ] Microsoft.UI.Xaml.Controls.Primitives.h
-    - [ ] Microsoft.UI.Xaml.Data.h
-    - [ ] Microsoft.UI.Xaml.Documents.h
-    - [ ] Microsoft.UI.Xaml.h
-    - [ ] Microsoft.UI.Xaml.Hosting.h
-    - [ ] Microsoft.UI.Xaml.Input.h
-    - [ ] Microsoft.UI.Xaml.Interop.h
-    - [ ] Microsoft.UI.Xaml.Markup.h
-    - [ ] Microsoft.UI.Xaml.Media.Animation.h
-    - [ ] Microsoft.UI.Xaml.Media.h
-    - [ ] Microsoft.UI.Xaml.Media.Imaging.h
-    - [ ] Microsoft.UI.Xaml.Media.Media3D.h
-    - [ ] Microsoft.UI.Xaml.Navigation.h
-    - [ ] Microsoft.UI.Xaml.Printing.h
-    - [ ] Microsoft.UI.Xaml.Resources.h
-    - [ ] Microsoft.UI.Xaml.Shapes.h
-    - [ ] Microsoft.UI.Xaml.XamlTypeInfo.h
-    - [ ] Microsoft.Web.WebView2.Core.h
-    - [ ] Microsoft.Windows.ApplicationModel.DynamicDependency.h
-    - [ ] Microsoft.Windows.ApplicationModel.Resources.h
-    - [ ] Microsoft.Windows.ApplicationModel.WindowsAppRuntime.h
-    - [ ] Microsoft.Windows.AppLifecycle.h
-    - [ ] Microsoft.Windows.AppNotifications.Builder.h
-    - [ ] Microsoft.Windows.AppNotifications.h
-    - [ ] Microsoft.Windows.Management.Deployment.h
-    - [ ] Microsoft.Windows.PushNotifications.h
-    - [ ] Microsoft.Windows.Security.AccessControl.h
-    - [ ] Microsoft.Windows.System.h
-    - [ ] Microsoft.Windows.System.Power.h
-    - [ ] Microsoft.Windows.Widgets.Feeds.Providers.h
-    - [ ] Microsoft.Windows.Widgets.h
-    - [ ] Microsoft.Windows.Widgets.Providers.h
-    - [ ] Windows.AI.MachineLearning.h
-    - [ ] Windows.AI.MachineLearning.Preview.h
-    - [ ] Windows.ApplicationModel.Activation.h
-    - [ ] Windows.ApplicationModel.AppExtensions.h
-    - [ ] Windows.ApplicationModel.Appointments.AppointmentsProvider.h
-    - [ ] Windows.ApplicationModel.Appointments.DataProvider.h
-    - [ ] Windows.ApplicationModel.Appointments.h
-    - [ ] Windows.ApplicationModel.AppService.h
-    - [ ] Windows.ApplicationModel.Background.h
-    - [ ] Windows.ApplicationModel.Calls.Background.h
-    - [ ] Windows.ApplicationModel.Calls.h
-    - [ ] Windows.ApplicationModel.Calls.Provider.h
-    - [ ] Windows.ApplicationModel.Chat.h
-    - [ ] Windows.ApplicationModel.CommunicationBlocking.h
-    - [ ] Windows.ApplicationModel.Contacts.DataProvider.h
-    - [ ] Windows.ApplicationModel.Contacts.h
-    - [ ] Windows.ApplicationModel.Contacts.Provider.h
-    - [ ] Windows.ApplicationModel.ConversationalAgent.h
-    - [ ] Windows.ApplicationModel.Core.h
-    - [ ] Windows.ApplicationModel.DataTransfer.DragDrop.Core.h
-    - [ ] Windows.ApplicationModel.DataTransfer.DragDrop.h
-    - [ ] Windows.ApplicationModel.DataTransfer.h
-    - [ ] Windows.ApplicationModel.DataTransfer.ShareTarget.h
-    - [ ] Windows.ApplicationModel.Email.DataProvider.h
-    - [ ] Windows.ApplicationModel.Email.h
-    - [ ] Windows.ApplicationModel.ExtendedExecution.Foreground.h
-    - [ ] Windows.ApplicationModel.ExtendedExecution.h
-    - [ ] Windows.ApplicationModel.h
-    - [ ] Windows.ApplicationModel.LockScreen.h
-    - [ ] Windows.ApplicationModel.Payments.h
-    - [ ] Windows.ApplicationModel.Payments.Provider.h
-    - [ ] Windows.ApplicationModel.Preview.Holographic.h
-    - [ ] Windows.ApplicationModel.Preview.InkWorkspace.h
-    - [ ] Windows.ApplicationModel.Preview.Notes.h
-    - [ ] Windows.ApplicationModel.Resources.Core.h
-    - [ ] Windows.ApplicationModel.Resources.h
-    - [ ] Windows.ApplicationModel.Resources.Management.h
-    - [ ] Windows.ApplicationModel.Search.Core.h
-    - [ ] Windows.ApplicationModel.Search.h
-    - [ ] Windows.ApplicationModel.SocialInfo.h
-    - [ ] Windows.ApplicationModel.SocialInfo.Provider.h
-    - [ ] Windows.ApplicationModel.Store.h
-    - [ ] Windows.ApplicationModel.Store.LicenseManagement.h
-    - [ ] Windows.ApplicationModel.Store.Preview.h
-    - [ ] Windows.ApplicationModel.Store.Preview.InstallControl.h
-    - [ ] Windows.ApplicationModel.UserActivities.Core.h
-    - [ ] Windows.ApplicationModel.UserActivities.h
-    - [ ] Windows.ApplicationModel.UserDataAccounts.h
-    - [ ] Windows.ApplicationModel.UserDataAccounts.Provider.h
-    - [ ] Windows.ApplicationModel.UserDataAccounts.SystemAccess.h
-    - [ ] Windows.ApplicationModel.UserDataTasks.DataProvider.h
-    - [ ] Windows.ApplicationModel.UserDataTasks.h
-    - [ ] Windows.ApplicationModel.VoiceCommands.h
-    - [ ] Windows.ApplicationModel.Wallet.h
-    - [ ] Windows.ApplicationModel.Wallet.System.h
-    - [ ] Windows.Data.Html.h
-    - [ ] Windows.Data.Json.h
-    - [ ] Windows.Data.Pdf.h
-    - [ ] Windows.Data.Text.h
-    - [ ] Windows.Data.Xml.Dom.h
-    - [ ] Windows.Data.Xml.Xsl.h
-    - [ ] Windows.Devices.Adc.h
-    - [ ] Windows.Devices.Adc.Provider.h
-    - [ ] Windows.Devices.AllJoyn.h
-    - [ ] Windows.Devices.Background.h
-    - [ ] Windows.Devices.Bluetooth.Advertisement.h
-    - [ ] Windows.Devices.Bluetooth.Background.h
-    - [ ] Windows.Devices.Bluetooth.GenericAttributeProfile.h
-    - [ ] Windows.Devices.Bluetooth.h
-    - [ ] Windows.Devices.Bluetooth.Rfcomm.h
-    - [ ] Windows.Devices.Custom.h
-    - [ ] Windows.Devices.Display.Core.h
-    - [ ] Windows.Devices.Display.h
-    - [ ] Windows.Devices.Enumeration.h
-    - [ ] Windows.Devices.Enumeration.Pnp.h
-    - [ ] Windows.Devices.Geolocation.Geofencing.h
-    - [ ] Windows.Devices.Geolocation.h
-    - [ ] Windows.Devices.Gpio.h
-    - [ ] Windows.Devices.Gpio.Provider.h
-    - [ ] Windows.Devices.h
-    - [ ] Windows.Devices.Haptics.h
-    - [ ] Windows.Devices.HumanInterfaceDevice.h
-    - [ ] Windows.Devices.I2c.h
-    - [ ] Windows.Devices.I2c.Provider.h
-    - [ ] Windows.Devices.Input.h
-    - [ ] Windows.Devices.Input.Preview.h
-    - [ ] Windows.Devices.Lights.Effects.h
-    - [ ] Windows.Devices.Lights.h
-    - [ ] Windows.Devices.Midi.h
-    - [ ] Windows.Devices.Perception.h
-    - [ ] Windows.Devices.Perception.Provider.h
-    - [ ] Windows.Devices.PointOfService.h
-    - [ ] Windows.Devices.PointOfService.Provider.h
-    - [ ] Windows.Devices.Portable.h
-    - [ ] Windows.Devices.Power.h
-    - [ ] Windows.Devices.Printers.Extensions.h
-    - [ ] Windows.Devices.Printers.h
-    - [ ] Windows.Devices.Pwm.h
-    - [ ] Windows.Devices.Pwm.Provider.h
-    - [ ] Windows.Devices.Radios.h
-    - [ ] Windows.Devices.Scanners.h
-    - [ ] Windows.Devices.Sensors.Custom.h
-    - [ ] Windows.Devices.Sensors.h
-    - [ ] Windows.Devices.SerialCommunication.h
-    - [ ] Windows.Devices.SmartCards.h
-    - [ ] Windows.Devices.Sms.h
-    - [ ] Windows.Devices.Spi.h
-    - [ ] Windows.Devices.Spi.Provider.h
-    - [ ] Windows.Devices.Usb.h
-    - [ ] Windows.Devices.WiFi.h
-    - [ ] Windows.Devices.WiFiDirect.h
-    - [ ] Windows.Devices.WiFiDirect.Services.h
-    - [ ] Windows.Embedded.DeviceLockdown.h
-    - [ ] Windows.Foundation.Collections.h
-    - [ ] Windows.Foundation.Diagnostics.h
-    - [ ] Windows.Foundation.h
-    - [ ] Windows.Foundation.Metadata.h
-    - [ ] Windows.Foundation.Numerics.h
-    - [ ] Windows.Gaming.Input.Custom.h
-    - [ ] Windows.Gaming.Input.ForceFeedback.h
-    - [ ] Windows.Gaming.Input.h
-    - [ ] Windows.Gaming.Input.Preview.h
-    - [ ] Windows.Gaming.Preview.GamesEnumeration.h
-    - [ ] Windows.Gaming.UI.h
-    - [ ] Windows.Gaming.XboxLive.Storage.h
-    - [ ] Windows.Globalization.Collation.h
-    - [ ] Windows.Globalization.DateTimeFormatting.h
-    - [ ] Windows.Globalization.Fonts.h
-    - [ ] Windows.Globalization.h
-    - [ ] Windows.Globalization.NumberFormatting.h
-    - [ ] Windows.Globalization.PhoneNumberFormatting.h
-    - [ ] Windows.Graphics.Capture.h
-    - [ ] Windows.Graphics.DirectX.Direct3D11.h
-    - [ ] Windows.Graphics.DirectX.h
-    - [ ] Windows.Graphics.Display.Core.h
-    - [ ] Windows.Graphics.Display.h
-    - [ ] Windows.Graphics.Effects.h
-    - [ ] Windows.Graphics.h
-    - [ ] Windows.Graphics.Holographic.h
-    - [ ] Windows.Graphics.Imaging.h
-    - [ ] Windows.Graphics.Printing.h
-    - [ ] Windows.Graphics.Printing.OptionDetails.h
-    - [ ] Windows.Graphics.Printing.PrintTicket.h
-    - [ ] Windows.Graphics.Printing.Workflow.h
-    - [ ] Windows.Graphics.Printing3D.h
-    - [ ] Windows.Management.Core.h
-    - [ ] Windows.Management.Deployment.h
-    - [ ] Windows.Management.Deployment.Preview.h
-    - [ ] Windows.Management.h
-    - [ ] Windows.Management.Policies.h
-    - [ ] Windows.Management.Update.h
-    - [ ] Windows.Management.Workplace.h
-    - [ ] Windows.Media.AppBroadcasting.h
-    - [ ] Windows.Media.AppRecording.h
-    - [ ] Windows.Media.Audio.h
-    - [ ] Windows.Media.Capture.Core.h
-    - [ ] Windows.Media.Capture.Frames.h
-    - [ ] Windows.Media.Capture.h
-    - [ ] Windows.Media.Casting.h
-    - [ ] Windows.Media.ClosedCaptioning.h
-    - [ ] Windows.Media.ContentRestrictions.h
-    - [ ] Windows.Media.Control.h
-    - [ ] Windows.Media.Core.h
-    - [ ] Windows.Media.Core.Preview.h
-    - [ ] Windows.Media.Devices.Core.h
-    - [ ] Windows.Media.Devices.h
-    - [ ] Windows.Media.DialProtocol.h
-    - [ ] Windows.Media.Editing.h
-    - [ ] Windows.Media.Effects.h
-    - [ ] Windows.Media.FaceAnalysis.h
-    - [ ] Windows.Media.h
-    - [ ] Windows.Media.Import.h
-    - [ ] Windows.Media.MediaProperties.h
-    - [ ] Windows.Media.Miracast.h
-    - [ ] Windows.Media.Ocr.h
-    - [ ] Windows.Media.Playback.h
-    - [ ] Windows.Media.Playlists.h
-    - [ ] Windows.Media.PlayTo.h
-    - [ ] Windows.Media.Protection.h
-    - [ ] Windows.Media.Protection.PlayReady.h
-    - [ ] Windows.Media.Render.h
-    - [ ] Windows.Media.SpeechRecognition.h
-    - [ ] Windows.Media.SpeechSynthesis.h
-    - [ ] Windows.Media.Streaming.Adaptive.h
-    - [ ] Windows.Media.Transcoding.h
-    - [ ] Windows.Networking.BackgroundTransfer.h
-    - [ ] Windows.Networking.Connectivity.h
-    - [ ] Windows.Networking.h
-    - [ ] Windows.Networking.NetworkOperators.h
-    - [ ] Windows.Networking.Proximity.h
-    - [ ] Windows.Networking.PushNotifications.h
-    - [ ] Windows.Networking.ServiceDiscovery.Dnssd.h
-    - [ ] Windows.Networking.Sockets.h
-    - [ ] Windows.Networking.Vpn.h
-    - [ ] Windows.Networking.XboxLive.h
-    - [ ] Windows.Perception.Automation.Core.h
-    - [ ] Windows.Perception.h
-    - [ ] Windows.Perception.People.h
-    - [ ] Windows.Perception.Spatial.h
-    - [ ] Windows.Perception.Spatial.Preview.h
-    - [ ] Windows.Perception.Spatial.Surfaces.h
-    - [ ] Windows.Phone.ApplicationModel.h
-    - [ ] Windows.Phone.Devices.Notification.h
-    - [ ] Windows.Phone.Devices.Power.h
-    - [ ] Windows.Phone.Management.Deployment.h
-    - [ ] Windows.Phone.Media.Devices.h
-    - [ ] Windows.Phone.Notification.Management.h
-    - [ ] Windows.Phone.PersonalInformation.h
-    - [ ] Windows.Phone.PersonalInformation.Provisioning.h
-    - [ ] Windows.Phone.Speech.Recognition.h
-    - [ ] Windows.Phone.StartScreen.h
-    - [ ] Windows.Phone.System.h
-    - [ ] Windows.Phone.System.Power.h
-    - [ ] Windows.Phone.System.Profile.h
-    - [ ] Windows.Phone.System.UserProfile.GameServices.Core.h
-    - [ ] Windows.Phone.UI.Input.h
-    - [ ] Windows.Security.Authentication.Identity.Core.h
-    - [ ] Windows.Security.Authentication.Identity.h
-    - [ ] Windows.Security.Authentication.Identity.Provider.h
-    - [ ] Windows.Security.Authentication.OnlineId.h
-    - [ ] Windows.Security.Authentication.Web.Core.h
-    - [ ] Windows.Security.Authentication.Web.h
-    - [ ] Windows.Security.Authentication.Web.Provider.h
-    - [ ] Windows.Security.Authorization.AppCapabilityAccess.h
-    - [ ] Windows.Security.Credentials.h
-    - [ ] Windows.Security.Credentials.UI.h
-    - [ ] Windows.Security.Cryptography.Certificates.h
-    - [ ] Windows.Security.Cryptography.Core.h
-    - [ ] Windows.Security.Cryptography.DataProtection.h
-    - [ ] Windows.Security.Cryptography.h
-    - [ ] Windows.Security.DataProtection.h
-    - [ ] Windows.Security.EnterpriseData.h
-    - [ ] Windows.Security.ExchangeActiveSyncProvisioning.h
-    - [ ] Windows.Services.Cortana.h
-    - [ ] Windows.Services.Maps.Guidance.h
-    - [ ] Windows.Services.Maps.h
-    - [ ] Windows.Services.Maps.LocalSearch.h
-    - [ ] Windows.Services.Maps.OfflineMaps.h
-    - [ ] Windows.Services.Store.h
-    - [ ] Windows.Services.TargetedContent.h
-    - [ ] Windows.Storage.AccessCache.h
-    - [ ] Windows.Storage.BulkAccess.h
-    - [ ] Windows.Storage.Compression.h
-    - [ ] Windows.Storage.FileProperties.h
-    - [ ] Windows.Storage.h
-    - [ ] Windows.Storage.Pickers.h
-    - [ ] Windows.Storage.Pickers.Provider.h
-    - [ ] Windows.Storage.Provider.h
-    - [ ] Windows.Storage.Search.h
-    - [ ] Windows.Storage.Streams.h
-    - [ ] Windows.System.Diagnostics.DevicePortal.h
-    - [ ] Windows.System.Diagnostics.h
-    - [ ] Windows.System.Diagnostics.Telemetry.h
-    - [ ] Windows.System.Diagnostics.TraceReporting.h
-    - [ ] Windows.System.Display.h
-    - [ ] Windows.System.h
-    - [ ] Windows.System.Inventory.h
-    - [ ] Windows.System.Power.Diagnostics.h
-    - [ ] Windows.System.Power.h
-    - [ ] Windows.System.Preview.h
-    - [ ] Windows.System.Profile.h
-    - [ ] Windows.System.Profile.SystemManufacturers.h
-    - [ ] Windows.System.RemoteDesktop.h
-    - [ ] Windows.System.RemoteSystems.h
-    - [ ] Windows.System.Threading.Core.h
-    - [ ] Windows.System.Threading.h
-    - [ ] Windows.System.Update.h
-    - [ ] Windows.System.UserProfile.h
-    - [ ] Windows.UI.Accessibility.h
-    - [ ] Windows.UI.ApplicationSettings.h
-    - [ ] Windows.UI.Composition.Core.h
-    - [ ] Windows.UI.Composition.Desktop.h
-    - [ ] Windows.UI.Composition.Diagnostics.h
-    - [ ] Windows.UI.Composition.Effects.h
-    - [ ] Windows.UI.Composition.h
-    - [ ] Windows.UI.Composition.Interactions.h
-    - [ ] Windows.UI.Composition.Scenes.h
-    - [ ] Windows.UI.Core.AnimationMetrics.h
-    - [ ] Windows.UI.Core.h
-    - [ ] Windows.UI.Core.Preview.h
-    - [ ] Windows.UI.h
-    - [ ] Windows.UI.Input.Core.h
-    - [ ] Windows.UI.Input.h
-    - [ ] Windows.UI.Input.Inking.Analysis.h
-    - [ ] Windows.UI.Input.Inking.Core.h
-    - [ ] Windows.UI.Input.Inking.h
-    - [ ] Windows.UI.Input.Inking.Preview.h
-    - [ ] Windows.UI.Input.Preview.h
-    - [ ] Windows.UI.Input.Preview.Injection.h
-    - [ ] Windows.UI.Input.Spatial.h
-    - [ ] Windows.UI.Notifications.h
-    - [ ] Windows.UI.Notifications.Management.h
-    - [ ] Windows.UI.Popups.h
-    - [ ] Windows.UI.Shell.h
-    - [ ] Windows.UI.StartScreen.h
-    - [ ] Windows.UI.Text.Core.h
-    - [ ] Windows.UI.Text.h
-    - [ ] Windows.UI.ViewManagement.Core.h
-    - [ ] Windows.UI.ViewManagement.h
-    - [ ] Windows.UI.WebUI.Core.h
-    - [ ] Windows.UI.WebUI.h
-    - [ ] Windows.UI.WindowManagement.h
-    - [ ] Windows.UI.WindowManagement.Preview.h
-    - [ ] Windows.UI.Xaml.Automation.h
-    - [ ] Windows.UI.Xaml.Automation.Peers.h
-    - [ ] Windows.UI.Xaml.Automation.Provider.h
-    - [ ] Windows.UI.Xaml.Automation.Text.h
-    - [ ] Windows.UI.Xaml.Controls.h
-    - [ ] Windows.UI.Xaml.Controls.Maps.h
-    - [ ] Windows.UI.Xaml.Controls.Primitives.h
-    - [ ] Windows.UI.Xaml.Core.Direct.h
-    - [ ] Windows.UI.Xaml.Data.h
-    - [ ] Windows.UI.Xaml.Documents.h
-    - [ ] Windows.UI.Xaml.h
-    - [ ] Windows.UI.Xaml.Hosting.h
-    - [ ] Windows.UI.Xaml.Input.h
-    - [ ] Windows.UI.Xaml.Interop.h
-    - [ ] Windows.UI.Xaml.Markup.h
-    - [ ] Windows.UI.Xaml.Media.Animation.h
-    - [ ] Windows.UI.Xaml.Media.h
-    - [ ] Windows.UI.Xaml.Media.Imaging.h
-    - [ ] Windows.UI.Xaml.Media.Media3D.h
-    - [ ] Windows.UI.Xaml.Navigation.h
-    - [ ] Windows.UI.Xaml.Printing.h
-    - [ ] Windows.UI.Xaml.Resources.h
-    - [ ] Windows.UI.Xaml.Shapes.h
-    - [ ] Windows.Web.AtomPub.h
-    - [ ] Windows.Web.h
-    - [ ] Windows.Web.Http.Diagnostics.h
-    - [ ] Windows.Web.Http.Filters.h
-    - [ ] Windows.Web.Http.h
-    - [ ] Windows.Web.Http.Headers.h
-    - [ ] Windows.Web.Syndication.h
-    - [ ] Windows.Web.UI.h
-    - [ ] Windows.Web.UI.Interop.h
-    """#
     let currentUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     let projectionUrl = currentUrl.appendingPathComponent("projections.md")
-    FileManager.default.createFile(atPath: projectionUrl.path, contents: text.data(using: .utf8)!)
+    FileManager.default.createFile(
+      atPath: projectionUrl.path, contents: projectionText.data(using: .utf8)!)
+  }
+
+  public func decodeProjectionValues(filePath: String) async throws {
+    let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appendingPathComponent(filePath)
+    let projectionString: String
+    do {
+      projectionString = try String(contentsOf: url, encoding: .utf8)
+    } catch {
+      throw DiagnosticError.NotFoundProjectionFile(url.path)
+    }
+    let data: ProjectionValue
+    do {
+      data = try ProjectionMarkdownParser().parse(projectionString.utf8)
+    } catch {
+      var errorMsg = ""
+      print(error, to: &errorMsg)
+      throw DiagnosticError.FailedParsingProjectionFile(errorMsg)
+    }
+    try await restoreNugetPackages(packages: PackageXML(packages: data.packages))
+    guard let swiftWinRT = data.packages.swiftWinRT else {
+      throw DiagnosticError.FailedToRestoreNugetPackage("swift-winrt package not found")
+    }
+    try await invokeSwiftWinRT(swiftWinRTNugetPackage: swiftWinRT, modules: data.modules)
   }
 
   /// Get nuget.exe from the internet and restore the specified package
   /// - Parameter packageDir: The directory where the package should be restored
-  public func restoreNugetPackages(packageDir: String) async throws {
-    let nugetExecutableUrl = FileManager.default.temporaryDirectory.appendingPathComponent("nuget.exe")
+  public func restoreNugetPackages(packages: PackageXML) async throws {
+    let nugetExecutableUrl = FileManager.default.temporaryDirectory
+      .appendingPathComponent("nuget.exe")
     if !FileManager.default.fileExists(atPath: nugetExecutableUrl.path) {
       let nugetUrl = URL(string: "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe")!
       let (data, _) = try await URLSession.shared.data(from: nugetUrl)
       try data.write(to: nugetExecutableUrl)
     }
 
-    /*
+    // Output PackageXML to .packages\packages.config
+    let packageDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appendingPathComponent(packageDirString, isDirectory: true)
+    try FileManager.default.createDirectory(at: packageDirUrl, withIntermediateDirectories: true)
+    let packageConfigUrl = packageDirUrl
+      .appendingPathComponent("packages.config")
+    let parser = PackageXMLParserPrinter()
+    let xmlText = try String(parser.print(packages))
+    guard let xmlText, !xmlText.isEmpty else {
+      throw DiagnosticError.FailedOutputXMLFile
+    }
+    try xmlText.write(to: packageConfigUrl, atomically: true, encoding: .utf8)
 
-    let iso8601DateFormatter = ISO8601DateFormatter()
-      let process = Foundation.Process()
-      process.executableURL = FileManager.default.temporaryDirectory.appendingPathComponent(
-        "nuget.exe")
-      process.arguments = ["aaa"]
-      let logFileUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        .appendingPathComponent("log.txt", isDirectory: false)
-      FileManager.default.createFile(atPath: logFileUrl.absoluteString.replacingOccurrences(of: "file://", with: ""),
-        contents: nil)
-      let logHandle = try FileHandle(forWritingTo: logFileUrl)
-      process.standardOutput = logHandle
-      process.standardError = logHandle
-      try process.run()
-      process.waitUntilExit()
-      let logReadHandle = try FileHandle(forReadingFrom: logFileUrl)
-      try logReadHandle.seek(toOffset: 0)
-      let content = try logReadHandle.readToEnd()
-      print(String(data: content ?? "no".data(using: .utf8)!, encoding: .utf8)!)
-      if process.terminationStatus != 0 {
-        throw ExitCode.failure
+
+    let process = Foundation.Process()
+    process.executableURL = FileManager.default.temporaryDirectory
+      .appendingPathComponent("nuget.exe")
+      // restore $PackagesConfigPath -PackagesDirectory $PackagesDir
+    process.arguments = ["restore", packageConfigUrl.path, "-PackagesDirectory", packageDirString]
+    process.standardOutput = FileHandle.standardOutput
+    process.standardError = FileHandle.standardError
+    try process.run()
+    await withCheckedContinuation { c in
+      process.terminationHandler = { process in
+        c.resume()
       }
+    }
+    if process.terminationStatus != 0 {
+      throw DiagnosticError.FailedToRestoreNugetPackage("nuget.exe failed to restore packages")
+    }
+  }
 
-    */
+  func invokeSwiftWinRT(swiftWinRTNugetPackage: NugetPackage, modules: [ModuleType]) async throws {
+    precondition(swiftWinRTNugetPackage.id == swiftWinRTId, "The package id must be swift-winrt")
+    let executableURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appendingPathComponent(packageDirString, isDirectory: true)
+      .appendingPathComponent("\(swiftWinRTNugetPackage.id).\(swiftWinRTNugetPackage.version)", isDirectory: true)
+      .appendingPathComponent("bin", isDirectory: true)
+      .appendingPathComponent("swiftwinrt.exe")
+
+    let generatedDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appendingPathComponent(generatedDirString, isDirectory: true)
+    try? FileManager.default.removeItem(at: generatedDirUrl)
+    try FileManager.default.createDirectory(at: generatedDirUrl, withIntermediateDirectories: true)
+
+    let rspFileString = "swift-winrt.rsp"
+    let rspFileUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appendingPathComponent(rspFileString)
+
+    var rspFileContent: [String] = []
+
+    // Build the rsp file
+    rspFileContent += ["-output \(generatedDirUrl.path)"]
+    rspFileContent += modules.compactMap { module in
+      switch module {
+      case .ignore:
+        return nil
+      case .include(let name):
+        return "-include \(name)"
+      case .exclude(let name):
+        return "-exclude \(name)"
+      }
+    }
+
+    // Search *.winmd files in .packages directory recursively
+    let packageDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appendingPathComponent(packageDirString, isDirectory: true)
+    let enumerator = FileManager.default.enumerator(
+      at: packageDirUrl,
+      includingPropertiesForKeys: [.isRegularFileKey],
+      options: [.skipsHiddenFiles, .skipsPackageDescendants])
+    var packageDirContents = [URL]()
+    if let enumerator {
+      for case let fileURL as URL in enumerator {
+          do {
+              let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey])
+              if fileAttributes.isRegularFile! {
+                  packageDirContents.append(fileURL)
+              }
+          } catch { /* The file is not a regular file */ }
+      }
+    }
+    let winmdFiles = packageDirContents.filter { $0.pathExtension == "winmd" }
+    rspFileContent += winmdFiles.map { "-input \($0.path)" }
+
+    try rspFileContent.joined(separator: "\n").write(to: rspFileUrl, atomically: true, encoding: .utf8)
+
+    let process = Foundation.Process()
+    process.executableURL = executableURL
+    process.arguments = ["@\(rspFileString)"]
+    process.standardOutput = FileHandle.standardOutput
+    process.standardError = FileHandle.standardError
+    try process.run()
+    await withCheckedContinuation { c in
+      process.terminationHandler = { process in
+        c.resume()
+      }
+    }
+    if process.terminationStatus != 0 {
+      throw DiagnosticError.FailedToSwiftWinRT("swift-winrt.exe failed to generate bindings")
+    }
   }
 }

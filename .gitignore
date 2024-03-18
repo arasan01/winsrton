@@ -8,3 +8,6 @@ DerivedData/
 .netrc
 
 projections.md
+generated/
+.packages/
+swift-winrt.rsp

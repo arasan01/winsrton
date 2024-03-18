@@ -18,13 +18,6 @@ struct Winsrton: AsyncParsableCommand {
   )
 }
 
-extension Verbosility: ExpressibleByArgument {}
-
-struct SharedOptions: ParsableArguments {
-  @Option(name: .shortAndLong, help: "The verbosity of output")
-  var verbosity: Verbosility = .normal
-}
-
 extension Winsrton {
   struct Generate: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -32,10 +25,12 @@ extension Winsrton {
       abstract: "Generate swift-winrt code from a projection file"
     )
 
-    @OptionGroup var sharedOptions: SharedOptions
+    @Argument(help: "The relative path to the projection file")
+    var projection: String = "projections.md"
 
     mutating func run() async throws {
-      print("TODO: Generating swift-winrt code")
+      let client = GenerateBindings()
+      try await client.decodeProjectionValues(filePath: projection)
     }
   }
 }
@@ -47,7 +42,6 @@ extension Winsrton {
       abstract: "Initialize a swift-winrt project"
     )
 
-    @OptionGroup var sharedOptions: SharedOptions
 
     mutating func run() async throws {
       let client = GenerateBindings()
@@ -63,7 +57,6 @@ extension Winsrton {
       abstract: "Bundle swift-winrt code into a package"
     )
 
-    @OptionGroup var sharedOptions: SharedOptions
 
     mutating func run() async throws {
       print("TODO: Bundling swift-winrt code")
