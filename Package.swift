@@ -26,6 +26,9 @@ let package = Package(
             name: "WinsrtonCore",
             dependencies: [
                 .product(name: "Parsing", package: "swift-parsing")
+            ],
+            resources: [
+                .copy("Resources")
             ]
         ),
         .testTarget(name: "winsrtonTests", dependencies: [

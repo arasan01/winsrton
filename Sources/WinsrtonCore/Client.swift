@@ -76,7 +76,8 @@ public actor GenerateBindings {
     let packageDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
       .appendingPathComponent(packageDirString, isDirectory: true)
     try FileManager.default.createDirectory(at: packageDirUrl, withIntermediateDirectories: true)
-    let packageConfigUrl = packageDirUrl
+    let packageConfigUrl =
+      packageDirUrl
       .appendingPathComponent("packages.config")
     let parser = PackageXMLParserPrinter()
     let xmlText = try String(parser.print(packages))
@@ -86,29 +87,23 @@ public actor GenerateBindings {
     try xmlText.write(to: packageConfigUrl, atomically: true, encoding: .utf8)
 
 
-    let process = Foundation.Process()
-    process.executableURL = FileManager.default.temporaryDirectory
+    let nugetExecUrl = FileManager.default.temporaryDirectory
       .appendingPathComponent("nuget.exe")
-      // restore $PackagesConfigPath -PackagesDirectory $PackagesDir
-    process.arguments = ["restore", packageConfigUrl.path, "-PackagesDirectory", packageDirString]
-    process.standardOutput = FileHandle.standardOutput
-    process.standardError = FileHandle.standardError
-    try process.run()
-    await withCheckedContinuation { c in
-      process.terminationHandler = { process in
-        c.resume()
-      }
-    }
-    if process.terminationStatus != 0 {
+    let arguments = ["restore", packageConfigUrl.path, "-PackagesDirectory", packageDirString]
+    guard try await processCall(executableURL: nugetExecUrl, arguments: arguments) else {
       throw DiagnosticError.FailedToRestoreNugetPackage("nuget.exe failed to restore packages")
     }
   }
 
-  func invokeSwiftWinRT(swiftWinRTNugetPackage: NugetPackage, modules: [ModuleType]) async throws {
+  public func invokeSwiftWinRT(swiftWinRTNugetPackage: NugetPackage, modules: [ModuleType])
+    async throws
+  {
     precondition(swiftWinRTNugetPackage.id == swiftWinRTId, "The package id must be swift-winrt")
-    let executableURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    let swiftWinRTExecUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
       .appendingPathComponent(packageDirString, isDirectory: true)
-      .appendingPathComponent("\(swiftWinRTNugetPackage.id).\(swiftWinRTNugetPackage.version)", isDirectory: true)
+      .appendingPathComponent(
+        "\(swiftWinRTNugetPackage.id).\(swiftWinRTNugetPackage.version)", isDirectory: true
+      )
       .appendingPathComponent("bin", isDirectory: true)
       .appendingPathComponent("swiftwinrt.exe")
 
@@ -144,38 +139,55 @@ public actor GenerateBindings {
       includingPropertiesForKeys: [.isRegularFileKey],
       options: [.skipsHiddenFiles, .skipsPackageDescendants])
     var packageDirContents = [URL]()
-    if let enumerator {
-      for case let fileURL as URL in enumerator {
-          do {
-              let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey])
-              if fileAttributes.isRegularFile! {
-                  packageDirContents.append(fileURL)
-              }
-          } catch { /* The file is not a regular file */ }
-      }
+    guard let enumerator else {
+      throw DiagnosticError.FailedToSwiftWinRT("Failed to find winmd files in .packages directory")
+    }
+    for case let fileURL as URL in enumerator {
+        do {
+            let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey])
+            if fileAttributes.isRegularFile! {
+                packageDirContents.append(fileURL)
+            }
+        } catch { /* The file is not a regular file */ }
     }
     let winmdFiles = packageDirContents.filter { $0.pathExtension == "winmd" }
     rspFileContent += winmdFiles.map { "-input \($0.path)" }
 
-    try rspFileContent.joined(separator: "\n").write(to: rspFileUrl, atomically: true, encoding: .utf8)
+    try rspFileContent.joined(separator: "\n").write(
+      to: rspFileUrl, atomically: true, encoding: .utf8)
 
-    let process = Foundation.Process()
-    process.executableURL = executableURL
-    process.arguments = ["@\(rspFileString)"]
-    process.standardOutput = FileHandle.standardOutput
-    process.standardError = FileHandle.standardError
-    try process.run()
-    await withCheckedContinuation { c in
-      process.terminationHandler = { process in
-        c.resume()
-      }
-    }
-    if process.terminationStatus != 0 {
+    guard try await processCall(executableURL: swiftWinRTExecUrl, arguments: ["@\(rspFileString)"]) else {
       throw DiagnosticError.FailedToSwiftWinRT("swift-winrt.exe failed to generate bindings")
     }
   }
 
-  func copyAssets(arch: String) {
+  public func generateSwiftPackage() async throws {
+    let generatedSourcesDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appendingPathComponent(generatedDirString, isDirectory: true)
+      .appendingPathComponent("Sources")
+    try FileManager.default.contentsOfDirectory(at: generatedSourcesDirUrl, includingPropertiesForKeys: [.isDirectoryKey])
+    var isDir: ObjCBool = false
+    // if FileManager.default.fileExists(atPath: generatedWin2DUrl.path, isDirectory: &isDir) {
+    //   let win2DResourceUrls = Bundle.module.urls(forResourcesWithExtension: nil, subdirectory: "Win2D")!
+    //   for case let win2DResourceUrl as URL in win2DResourceUrls {
+    //     let generatedWin2DUrl = generatedWin2DUrl.appendingPathComponent(win2DResourceUrl.lastPathComponent)
+    //     try FileManager.default.copyItem(at: win2DResourceUrl, to: generatedWin2DUrl)
+    //   }
+    // }
+  }
 
+  public func copyAssets(arch: WinArch) async throws {
+    let generatedDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appendingPathComponent(generatedDirString, isDirectory: true)
+    let generatedWin2DUrl = generatedDirUrl.appendingPathComponent("Sources").appendingPathComponent("Win2D")
+    var isDir: ObjCBool = false
+    print(generatedWin2DUrl.path)
+    if FileManager.default.fileExists(atPath: generatedWin2DUrl.path, isDirectory: &isDir) {
+      let win2DResourceUrls = Bundle.module.urls(forResourcesWithExtension: nil, subdirectory: "Win2D")!
+      for case let win2DResourceUrl as URL in win2DResourceUrls {
+        let generatedWin2DUrl = generatedWin2DUrl.appendingPathComponent(win2DResourceUrl.lastPathComponent)
+        try FileManager.default.copyItem(at: win2DResourceUrl, to: generatedWin2DUrl)
+      }
+    }
   }
 }
