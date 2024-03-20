@@ -42,11 +42,13 @@ struct ProjectionMarkdownParser: Parser {
     struct ProjectionDependencyParser: Parser {
       var body: some Parser<Substring.UTF8View, NugetPackage> {
         Parse(.memberwise(NugetPackage.init(id:version:))) {
-          "- id: ".utf8
+          "- id:".utf8
+          Whitespace()
           Prefix { $0 != UInt8(ascii: "\n") }.map(.string)
           "\n".utf8
           Whitespace()
-          "- version: ".utf8
+          "- version:".utf8
+          Whitespace()
           Prefix { $0 != UInt8(ascii: "\n") }.map(.string)
           "\n".utf8
         }
