@@ -79,7 +79,7 @@ public actor GenerateBindings {
     // Output PackageXML to .packages\packages.config
     let packageDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
       .appendingPathComponent(packageDirString, isDirectory: true)
-    try FileManager.default.createDirectory(at: packageDirUrl, withIntermediateDirectories: true)
+    try? FileManager.default.createDirectory(at: packageDirUrl, withIntermediateDirectories: true)
     let packageConfigUrl =
       packageDirUrl
       .appendingPathComponent("packages.config")
@@ -174,19 +174,20 @@ public actor GenerateBindings {
       }
     let projectionDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
       .appendingPathComponent(winRTProjectionsDirString, isDirectory: true)
-    try? FileManager.default.removeItem(at: projectionDirUrl)
     for dir in dirs {
       switch dir.lastPathComponent {
       case "CWinRT":
         let projectionModuleUrl =
           projectionDirUrl
           .appendingPathComponent(dir.lastPathComponent, isDirectory: true)
+        try? FileManager.default.removeItem(at: projectionModuleUrl)
         try FileManager.default.copyItem(at: dir, to: projectionModuleUrl)
       default:
         let projectionModuleUrl =
           projectionDirUrl
           .appendingPathComponent(dir.lastPathComponent, isDirectory: true)
           .appendingPathComponent("Generated", isDirectory: true)
+        try? FileManager.default.removeItem(at: projectionModuleUrl)
         try? FileManager.default.createDirectory(
           at: projectionModuleUrl, withIntermediateDirectories: true)
 
@@ -196,6 +197,7 @@ public actor GenerateBindings {
           let toUrl =
             projectionModuleUrl
             .appendingPathComponent(atUrl.lastPathComponent)
+          try? FileManager.default.removeItem(at: toUrl)
           try FileManager.default.copyItem(at: atUrl, to: toUrl)
         }
       }
@@ -218,6 +220,7 @@ public actor GenerateBindings {
           forResourcesWithExtension: nil, subdirectory: asset)!
         for case let assetResourceUrl as URL in assetResourceUrls {
           let toUrl = projectionAssetUrl.appendingPathComponent(assetResourceUrl.lastPathComponent)
+          try? FileManager.default.removeItem(at: toUrl)
           try FileManager.default.copyItem(at: assetResourceUrl, to: toUrl)
         }
       }
@@ -228,6 +231,7 @@ public actor GenerateBindings {
       let asset = "CWinAppSDK"
       let projectionAssetUrl = projectionDirUrl.appendingPathComponent(asset)
       let assetResourceUrl = Bundle.module.url(forResource: asset, withExtension: nil)!
+      try? FileManager.default.removeItem(at: projectionAssetUrl)
       try FileManager.default.copyItem(at: assetResourceUrl, to: projectionAssetUrl)
     }
 
@@ -240,58 +244,71 @@ public actor GenerateBindings {
         .appendingPathComponent("win-\(arch.rawValue)", isDirectory: true)
         .appendingPathComponent("native", isDirectory: true)
         .appendingPathComponent(canvasDllString)
-      let win2DUrl = projectionDirUrl
+      let win2DUrl =
+        projectionDirUrl
         .appendingPathComponent("Win2D")
         .appendingPathComponent("Resources", isDirectory: true)
         .appendingPathComponent(canvasDllString)
+      try? FileManager.default.removeItem(at: win2DUrl)
       try FileManager.default.copyItem(at: canvasDllUrl, to: win2DUrl)
     }
 
     // Copy nuget resource for CWinAppSDK
     if let winAppSDKPackage = nugetPackages.first(where: { $0.id == windowsAppSDKId }) {
-      try FileManager.default.createDirectory(
-        at: projectionDirUrl
+      let nugetResourceDirUrl = projectionDirUrl
           .appendingPathComponent("CWinAppSDK")
-          .appendingPathComponent("nuget", isDirectory: true),
-        withIntermediateDirectories: true)
-      do { // lib
+          .appendingPathComponent("nuget", isDirectory: true)
+      try? FileManager.default.removeItem(at: nugetResourceDirUrl)
+      try FileManager.default.createDirectory(at: nugetResourceDirUrl, withIntermediateDirectories: true)
+      do {  // lib
         let libUrl = URL(fileURLWithPath: currentDir)
           .appendingPathComponent(packageDirString, isDirectory: true)
-          .appendingPathComponent("\(winAppSDKPackage.id).\(winAppSDKPackage.version)", isDirectory: true)
+          .appendingPathComponent(
+            "\(winAppSDKPackage.id).\(winAppSDKPackage.version)", isDirectory: true
+          )
           .appendingPathComponent("lib", isDirectory: true)
           .appendingPathComponent("win10-\(arch.rawValue)", isDirectory: true)
-        let winAppSDKUrl = projectionDirUrl
+        let winAppSDKUrl =
+          projectionDirUrl
           .appendingPathComponent("CWinAppSDK")
           .appendingPathComponent("nuget", isDirectory: true)
           .appendingPathComponent("lib", isDirectory: true)
+        try? FileManager.default.removeItem(at: winAppSDKUrl)
         try FileManager.default.copyItem(at: libUrl, to: winAppSDKUrl)
       }
 
-      do { // bin
+      do {  // bin
         let libUrl = URL(fileURLWithPath: currentDir)
           .appendingPathComponent(packageDirString, isDirectory: true)
-          .appendingPathComponent("\(winAppSDKPackage.id).\(winAppSDKPackage.version)", isDirectory: true)
+          .appendingPathComponent(
+            "\(winAppSDKPackage.id).\(winAppSDKPackage.version)", isDirectory: true
+          )
           .appendingPathComponent("runtimes", isDirectory: true)
           .appendingPathComponent("win-\(arch.rawValue)", isDirectory: true)
           .appendingPathComponent("native", isDirectory: true)
-        let winAppSDKUrl = projectionDirUrl
+        let winAppSDKUrl =
+          projectionDirUrl
           .appendingPathComponent("CWinAppSDK")
           .appendingPathComponent("nuget", isDirectory: true)
           .appendingPathComponent("bin", isDirectory: true)
+        try? FileManager.default.removeItem(at: winAppSDKUrl)
         try FileManager.default.copyItem(at: libUrl, to: winAppSDKUrl)
       }
 
-      do { // include only header file
+      do {  // include only header file
         let includeUrl = URL(fileURLWithPath: currentDir)
           .appendingPathComponent(packageDirString, isDirectory: true)
-          .appendingPathComponent("\(winAppSDKPackage.id).\(winAppSDKPackage.version)", isDirectory: true)
+          .appendingPathComponent(
+            "\(winAppSDKPackage.id).\(winAppSDKPackage.version)", isDirectory: true
+          )
           .appendingPathComponent("include", isDirectory: true)
         let enumerator = FileManager.default.enumerator(
           at: includeUrl,
           includingPropertiesForKeys: [.isRegularFileKey],
           options: [.skipsHiddenFiles, .skipsPackageDescendants])
         guard let enumerator else {
-          throw DiagnosticError.FailedToSwiftWinRT("Failed to find winmd files in .packages directory")
+          throw DiagnosticError.FailedToSwiftWinRT(
+            "Failed to find winmd files in .packages directory")
         }
         let packageDirContents: [URL] = enumerator.compactMap { url in
           guard
@@ -303,20 +320,24 @@ public actor GenerateBindings {
         let headerFiles = packageDirContents.filter { $0.pathExtension == "h" }
         let copySourceHeaderFiles = headerFiles.filter { header in
           // winrt内部とルートに両方同じ名前で存在している場合にのみwinrtの方をコピーする。それ以外はそのままコピーする
-          guard headerFiles.filter({ header.lastPathComponent == $0.lastPathComponent }).count > 1 else {
+          guard headerFiles.filter({ header.lastPathComponent == $0.lastPathComponent }).count > 1
+          else {
             return true
           }
           return header.pathComponents.contains("winrt")
         }
 
-        let winAppSDKUrl = projectionDirUrl
+        let winAppSDKUrl =
+          projectionDirUrl
           .appendingPathComponent("CWinAppSDK")
           .appendingPathComponent("nuget", isDirectory: true)
           .appendingPathComponent("include", isDirectory: true)
+        try? FileManager.default.removeItem(at: winAppSDKUrl)
         try FileManager.default.createDirectory(at: winAppSDKUrl, withIntermediateDirectories: true)
 
         for header in copySourceHeaderFiles {
           let toUrl = winAppSDKUrl.appendingPathComponent(header.lastPathComponent)
+          try? FileManager.default.removeItem(at: toUrl)
           try FileManager.default.copyItem(at: header, to: toUrl)
         }
       }
@@ -331,99 +352,102 @@ public actor GenerateBindings {
       .filter {
         (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
       }
-    let products = dirs.map { ".library(name: \"\($0.lastPathComponent)\", targets: [\"\($0.lastPathComponent)\"])" }
+    let products = dirs.map {
+      ".library(name: \"\($0.lastPathComponent)\", targets: [\"\($0.lastPathComponent)\"])"
+    }
     let targets = dirs.compactMap {
       switch $0.lastPathComponent {
       case "CWinRT":
         return """
-        .target(
-            name: "CWinRT",
-            path: "CWinRT",
-            linkerSettings: [
-                .unsafeFlags(["-nostartfiles"]),
-            ]
-        )
-        """
+          .target(
+              name: "CWinRT",
+              path: "CWinRT",
+              linkerSettings: [
+                  .unsafeFlags(["-nostartfiles"]),
+              ]
+          )
+          """
       case "CWinAppSDK":
         return """
-        .target(
-          name: "CWinAppSDK",
-          path: "CWinAppSDK",
-          resources: [
-            .copy("nuget/bin/Microsoft.WindowsAppRuntime.Bootstrap.dll"),
-          ],
-          linkerSettings: linkerSettings
-        )
-        """
+          .target(
+            name: "CWinAppSDK",
+            path: "CWinAppSDK",
+            resources: [
+              .copy("nuget/bin/Microsoft.WindowsAppRuntime.Bootstrap.dll"),
+            ],
+            linkerSettings: linkerSettings
+          )
+          """
       case "UWP":
         return """
-        .target(
-          name: "UWP",
-          dependencies: [
-            "CWinRT",
-            "WindowsFoundation",
-          ],
-          path: "UWP"
-        )
-        """
+          .target(
+            name: "UWP",
+            dependencies: [
+              "CWinRT",
+              "WindowsFoundation",
+            ],
+            path: "UWP"
+          )
+          """
       case "Win2D":
         return """
-        .target(
-          name: "Win2D",
-          dependencies: [
-            "CWinRT",
-            "UWP",
-            "WindowsFoundation",
-            "WinUI",
-          ],
-          path: "Win2D",
-          resources: [
-            .copy("Resources/app.exe.manifest"),
-            .copy("Resources/Microsoft.Graphics.Canvas.dll"),
-          ]
-        )
-        """
+          .target(
+            name: "Win2D",
+            dependencies: [
+              "CWinRT",
+              "UWP",
+              "WindowsFoundation",
+              "WinUI",
+            ],
+            path: "Win2D",
+            resources: [
+              .copy("Resources/app.exe.manifest"),
+              .copy("Resources/Microsoft.Graphics.Canvas.dll"),
+            ]
+          )
+          """
       case "WinAppSDK":
         return """
-        .target(
-          name: "WinAppSDK",
-          dependencies: [
-            "CWinRT",
-            "UWP",
-            "WindowsFoundation",
-            "CWinAppSDK"
-          ],
-          path: "WinAppSDK"
-        )
-        """
+          .target(
+            name: "WinAppSDK",
+            dependencies: [
+              "CWinRT",
+              "UWP",
+              "WindowsFoundation",
+              "CWinAppSDK"
+            ],
+            path: "WinAppSDK"
+          )
+          """
       case "WindowsFoundation":
         return """
-        .target(
-          name: "WindowsFoundation",
-          dependencies: [
-            "CWinRT",
-          ],
-          path: "WindowsFoundation"
-        )
-        """
+          .target(
+            name: "WindowsFoundation",
+            dependencies: [
+              "CWinRT",
+            ],
+            path: "WindowsFoundation"
+          )
+          """
       case "WinUI":
         return """
-        .target(
-          name: "WinUI",
-          dependencies: [
-            "CWinRT",
-            "UWP",
-            "WinAppSDK",
-            "WindowsFoundation",
-          ],
-          path: "WinUI"
-        )
-        """
+          .target(
+            name: "WinUI",
+            dependencies: [
+              "CWinRT",
+              "UWP",
+              "WinAppSDK",
+              "WindowsFoundation",
+            ],
+            path: "WinUI"
+          )
+          """
       default:
         return nil
       }
     }
-    let swiftPackageUrl = projectionDirUrl
+    let swiftPackageUrl =
+      projectionDirUrl
       .appendingPathComponent("Package.swift")
     let swiftPackageText = """
       // swift-tools-version:6.0
@@ -446,8 +470,8 @@ public actor GenerateBindings {
         ],
         targets: [
           \(targets
-            .map { $0.replacingOccurrences(of: "\n", with: "\n    ") }
-            .joined(separator: ",\n    "))
+                  .map { $0.replacingOccurrences(of: "\n", with: "\n    ") }
+                  .joined(separator: ",\n    "))
         ]
       )
       """
