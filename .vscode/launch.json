@@ -6,7 +6,7 @@
       "sourceLanguages": [
         "swift"
       ],
-      "args": [],
+      "args": ["generate"],
       "cwd": "${workspaceFolder:winsrton}",
       "name": "Debug winsrton",
       "program": "${workspaceFolder:winsrton}\\.build\\debug\\winsrton.exe",

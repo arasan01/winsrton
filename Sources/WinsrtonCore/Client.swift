@@ -62,7 +62,7 @@ public actor GenerateBindings {
     }
     try await invokeSwiftWinRT(swiftWinRTNugetPackage: swiftWinRT, modules: data.modules)
     try await generateSwiftPackage()
-    try await copyAssets(arch: arch)
+    try await copyAssets(arch: arch, nugetPackages: data.packages)
     try await writeProjectionPackageSwift()
   }
 
@@ -202,11 +202,12 @@ public actor GenerateBindings {
     }
   }
 
-  public func copyAssets(arch: WinArch) async throws {
-    let projectionDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+  public func copyAssets(arch: WinArch, nugetPackages: [NugetPackage]) async throws {
+    let currentDir = FileManager.default.currentDirectoryPath
+    let projectionDirUrl = URL(fileURLWithPath: currentDir)
       .appendingPathComponent(winRTProjectionsDirString, isDirectory: true)
 
-    // for Win2D and WinUI
+    // Copy customized resource for Win2D and WinUI
     let knownNeedAssets = ["Win2D", "WinUI", "WinAppSDK"]
     var isDir: ObjCBool = true
     for asset in knownNeedAssets {
@@ -222,12 +223,103 @@ public actor GenerateBindings {
       }
     }
 
-    // for CWinAppSDK
+    // Copy customized resource for CWinAppSDK
     do {
       let asset = "CWinAppSDK"
       let projectionAssetUrl = projectionDirUrl.appendingPathComponent(asset)
       let assetResourceUrl = Bundle.module.url(forResource: asset, withExtension: nil)!
       try FileManager.default.copyItem(at: assetResourceUrl, to: projectionAssetUrl)
+    }
+
+    // Copy nuget resource for Win2D
+    if let win2DPackage = nugetPackages.first(where: { $0.id == win2DId }) {
+      let canvasDllUrl = URL(fileURLWithPath: currentDir)
+        .appendingPathComponent(packageDirString, isDirectory: true)
+        .appendingPathComponent("\(win2DPackage.id).\(win2DPackage.version)", isDirectory: true)
+        .appendingPathComponent("runtimes", isDirectory: true)
+        .appendingPathComponent("win-\(arch.rawValue)", isDirectory: true)
+        .appendingPathComponent("native", isDirectory: true)
+        .appendingPathComponent(canvasDllString)
+      let win2DUrl = projectionDirUrl
+        .appendingPathComponent("Win2D")
+        .appendingPathComponent("Resources", isDirectory: true)
+        .appendingPathComponent(canvasDllString)
+      try FileManager.default.copyItem(at: canvasDllUrl, to: win2DUrl)
+    }
+
+    // Copy nuget resource for CWinAppSDK
+    if let winAppSDKPackage = nugetPackages.first(where: { $0.id == windowsAppSDKId }) {
+      try FileManager.default.createDirectory(
+        at: projectionDirUrl
+          .appendingPathComponent("CWinAppSDK")
+          .appendingPathComponent("nuget", isDirectory: true),
+        withIntermediateDirectories: true)
+      do { // lib
+        let libUrl = URL(fileURLWithPath: currentDir)
+          .appendingPathComponent(packageDirString, isDirectory: true)
+          .appendingPathComponent("\(winAppSDKPackage.id).\(winAppSDKPackage.version)", isDirectory: true)
+          .appendingPathComponent("lib", isDirectory: true)
+          .appendingPathComponent("win10-\(arch.rawValue)", isDirectory: true)
+        let winAppSDKUrl = projectionDirUrl
+          .appendingPathComponent("CWinAppSDK")
+          .appendingPathComponent("nuget", isDirectory: true)
+          .appendingPathComponent("lib", isDirectory: true)
+        try FileManager.default.copyItem(at: libUrl, to: winAppSDKUrl)
+      }
+
+      do { // bin
+        let libUrl = URL(fileURLWithPath: currentDir)
+          .appendingPathComponent(packageDirString, isDirectory: true)
+          .appendingPathComponent("\(winAppSDKPackage.id).\(winAppSDKPackage.version)", isDirectory: true)
+          .appendingPathComponent("runtimes", isDirectory: true)
+          .appendingPathComponent("win-\(arch.rawValue)", isDirectory: true)
+          .appendingPathComponent("native", isDirectory: true)
+        let winAppSDKUrl = projectionDirUrl
+          .appendingPathComponent("CWinAppSDK")
+          .appendingPathComponent("nuget", isDirectory: true)
+          .appendingPathComponent("bin", isDirectory: true)
+        try FileManager.default.copyItem(at: libUrl, to: winAppSDKUrl)
+      }
+
+      do { // include only header file
+        let includeUrl = URL(fileURLWithPath: currentDir)
+          .appendingPathComponent(packageDirString, isDirectory: true)
+          .appendingPathComponent("\(winAppSDKPackage.id).\(winAppSDKPackage.version)", isDirectory: true)
+          .appendingPathComponent("include", isDirectory: true)
+        let enumerator = FileManager.default.enumerator(
+          at: includeUrl,
+          includingPropertiesForKeys: [.isRegularFileKey],
+          options: [.skipsHiddenFiles, .skipsPackageDescendants])
+        guard let enumerator else {
+          throw DiagnosticError.FailedToSwiftWinRT("Failed to find winmd files in .packages directory")
+        }
+        let packageDirContents: [URL] = enumerator.compactMap { url in
+          guard
+            let url = url as? URL,
+            let fileAttributes = try? url.resourceValues(forKeys: [.isRegularFileKey])
+          else { return nil }
+          return (fileAttributes.isRegularFile ?? false) ? url : nil
+        }
+        let headerFiles = packageDirContents.filter { $0.pathExtension == "h" }
+        let copySourceHeaderFiles = headerFiles.filter { header in
+          // winrt内部とルートに両方同じ名前で存在している場合にのみwinrtの方をコピーする。それ以外はそのままコピーする
+          guard headerFiles.filter({ header.lastPathComponent == $0.lastPathComponent }).count > 1 else {
+            return true
+          }
+          return header.pathComponents.contains("winrt")
+        }
+
+        let winAppSDKUrl = projectionDirUrl
+          .appendingPathComponent("CWinAppSDK")
+          .appendingPathComponent("nuget", isDirectory: true)
+          .appendingPathComponent("include", isDirectory: true)
+        try FileManager.default.createDirectory(at: winAppSDKUrl, withIntermediateDirectories: true)
+
+        for header in copySourceHeaderFiles {
+          let toUrl = winAppSDKUrl.appendingPathComponent(header.lastPathComponent)
+          try FileManager.default.copyItem(at: header, to: toUrl)
+        }
+      }
     }
   }
 
@@ -287,6 +379,7 @@ public actor GenerateBindings {
           path: "Win2D",
           resources: [
             .copy("Resources/app.exe.manifest"),
+            .copy("Resources/Microsoft.Graphics.Canvas.dll"),
           ]
         )
         """
@@ -341,7 +434,7 @@ public actor GenerateBindings {
 
       let linkerSettings: [LinkerSetting] = [
       /* Figure out magic incantation so we can delay load these dlls
-          .unsafeFlags(["-L\\(currentDirectory)/Sources/CWinAppSDK/nuget/lib"]),
+          .unsafeFlags(["-L\\(currentDirectory)/CWinAppSDK/nuget/lib"]),
           .unsafeFlags(["-Xlinker" , "/DELAYLOAD:Microsoft.WindowsAppRuntime.Bootstrap.dll"]),
       */
       ]

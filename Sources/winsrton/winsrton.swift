@@ -7,7 +7,7 @@ struct Winsrton: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
     abstract: "swift-winrt wrapper command line tool",
     version: "1.0.0",
-    subcommands: [Generate.self, Bundle.self, Initialize.self, Debug.self],
+    subcommands: [Generate.self, Bundle.self, Initialize.self],
     defaultSubcommand: nil
   )
 }
@@ -87,9 +87,7 @@ extension Winsrton {
 
     mutating func run() async throws {
       try isSupportedOperatingSystem()
-      let client = GenerateBindings()
-      try await client.generateSwiftPackage()
-      try await client.copyAssets(arch: .x64)
+      // let client = GenerateBindings()
     }
   }
 }
