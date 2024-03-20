@@ -447,6 +447,18 @@ public actor GenerateBindings {
             path: "WinUI"
           )
           """
+      case "WebView2Core":
+        return """
+          .target(
+            name: "WebView2Core",
+            dependencies: [
+              "CWinRT",
+              "UWP",
+              "WindowsFoundation",
+            ],
+            path: "WebView2Core"
+          )
+          """
       default:
         return nil
       }
