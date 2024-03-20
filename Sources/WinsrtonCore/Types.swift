@@ -33,3 +33,9 @@ extension Array where Element == NugetPackage {
     self.first { $0.id == swiftWinRTId }
   }
 }
+
+public enum WinArch: String {
+  case x86
+  case x64
+  case arm64
+}

@@ -22,9 +22,12 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
-        .target(name: "WinsrtonCore", dependencies: [
-            .product(name: "Parsing", package: "swift-parsing")
-        ]),
+        .target(
+            name: "WinsrtonCore",
+            dependencies: [
+                .product(name: "Parsing", package: "swift-parsing")
+            ]
+        ),
         .testTarget(name: "winsrtonTests", dependencies: [
             "WinsrtonCore"
         ])

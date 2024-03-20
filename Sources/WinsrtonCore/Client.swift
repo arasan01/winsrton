@@ -1,26 +1,8 @@
 import Foundation
-import Parsing
 
 #if canImport(FoundationNetworking)
   import FoundationNetworking
 #endif
-
-extension URLSession {
-  func data(from url: URL) async throws -> (Data, URLResponse) {
-    try await withCheckedThrowingContinuation { continuation in
-      let task = dataTask(with: url) { data, response, error in
-        if let error = error {
-          continuation.resume(throwing: error)
-        } else if let data = data, let response = response {
-          continuation.resume(returning: (data, response))
-        } else {
-          fatalError("Either data or response is nil")
-        }
-      }
-      task.resume()
-    }
-  }
-}
 
 public enum DiagnosticError: LocalizedError {
   case NotFoundProjectionFile(String)
@@ -56,7 +38,7 @@ public actor GenerateBindings {
       atPath: projectionUrl.path, contents: projectionText.data(using: .utf8)!)
   }
 
-  public func decodeProjectionValues(filePath: String) async throws {
+  public func invokeGeneratePackages(filePath: String) async throws {
     let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
       .appendingPathComponent(filePath)
     let projectionString: String
@@ -81,7 +63,6 @@ public actor GenerateBindings {
   }
 
   /// Get nuget.exe from the internet and restore the specified package
-  /// - Parameter packageDir: The directory where the package should be restored
   public func restoreNugetPackages(packages: PackageXML) async throws {
     let nugetExecutableUrl = FileManager.default.temporaryDirectory
       .appendingPathComponent("nuget.exe")
@@ -192,5 +173,9 @@ public actor GenerateBindings {
     if process.terminationStatus != 0 {
       throw DiagnosticError.FailedToSwiftWinRT("swift-winrt.exe failed to generate bindings")
     }
+  }
+
+  func copyAssets(arch: String) {
+
   }
 }

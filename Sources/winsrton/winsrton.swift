@@ -1,9 +1,3 @@
-// The Swift Programming Language
-// https://docs.swift.org/swift-book
-//
-// Swift Argument Parser
-// https://swiftpackageindex.com/apple/swift-argument-parser/documentation
-
 import ArgumentParser
 import Foundation
 import WinsrtonCore
@@ -29,8 +23,9 @@ extension Winsrton {
     var projection: String = "projections.md"
 
     mutating func run() async throws {
+      try isSupportedOperatingSystem()
       let client = GenerateBindings()
-      try await client.decodeProjectionValues(filePath: projection)
+      try await client.invokeGeneratePackages(filePath: projection)
     }
   }
 }
@@ -59,6 +54,7 @@ extension Winsrton {
 
 
     mutating func run() async throws {
+      try isSupportedOperatingSystem()
       print("TODO: Bundling swift-winrt code")
     }
   }
