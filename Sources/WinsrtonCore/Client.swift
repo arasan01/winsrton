@@ -3,7 +3,6 @@ import Foundation
 #if canImport(FoundationNetworking)
   import FoundationNetworking
 #endif
-
 public enum DiagnosticError: LocalizedError {
   case NotFoundProjectionFile(String)
   case FailedParsingProjectionFile(String)
@@ -26,7 +25,6 @@ public enum DiagnosticError: LocalizedError {
     }
   }
 }
-
 public actor GenerateBindings {
 
   public init() {}
@@ -34,11 +32,14 @@ public actor GenerateBindings {
   public func generateBindingFile() throws {
     let currentUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     let projectionUrl = currentUrl.appendingPathComponent("projections.md")
+    let templateStringUrl = Bundle.module.url(
+      forResource: "projection_template", withExtension: "md")!
+    let projectionText = try String(contentsOf: templateStringUrl, encoding: .utf8)
     FileManager.default.createFile(
       atPath: projectionUrl.path, contents: projectionText.data(using: .utf8)!)
   }
 
-  public func invokeGeneratePackages(filePath: String) async throws {
+  public func invokeGeneratePackages(filePath: String, arch: WinArch) async throws {
     let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
       .appendingPathComponent(filePath)
     let projectionString: String
@@ -60,6 +61,9 @@ public actor GenerateBindings {
       throw DiagnosticError.FailedToRestoreNugetPackage("swift-winrt package not found")
     }
     try await invokeSwiftWinRT(swiftWinRTNugetPackage: swiftWinRT, modules: data.modules)
+    try await generateSwiftPackage()
+    try await copyAssets(arch: arch)
+    try await writeProjectionPackageSwift()
   }
 
   /// Get nuget.exe from the internet and restore the specified package
@@ -85,7 +89,6 @@ public actor GenerateBindings {
       throw DiagnosticError.FailedOutputXMLFile
     }
     try xmlText.write(to: packageConfigUrl, atomically: true, encoding: .utf8)
-
 
     let nugetExecUrl = FileManager.default.temporaryDirectory
       .appendingPathComponent("nuget.exe")
@@ -138,17 +141,15 @@ public actor GenerateBindings {
       at: packageDirUrl,
       includingPropertiesForKeys: [.isRegularFileKey],
       options: [.skipsHiddenFiles, .skipsPackageDescendants])
-    var packageDirContents = [URL]()
     guard let enumerator else {
       throw DiagnosticError.FailedToSwiftWinRT("Failed to find winmd files in .packages directory")
     }
-    for case let fileURL as URL in enumerator {
-        do {
-            let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey])
-            if fileAttributes.isRegularFile! {
-                packageDirContents.append(fileURL)
-            }
-        } catch { /* The file is not a regular file */ }
+    let packageDirContents: [URL] = enumerator.compactMap { url in
+      guard
+        let url = url as? URL,
+        let fileAttributes = try? url.resourceValues(forKeys: [.isRegularFileKey])
+      else { return nil }
+      return (fileAttributes.isRegularFile ?? false) ? url : nil
     }
     let winmdFiles = packageDirContents.filter { $0.pathExtension == "winmd" }
     rspFileContent += winmdFiles.map { "-input \($0.path)" }
@@ -156,7 +157,8 @@ public actor GenerateBindings {
     try rspFileContent.joined(separator: "\n").write(
       to: rspFileUrl, atomically: true, encoding: .utf8)
 
-    guard try await processCall(executableURL: swiftWinRTExecUrl, arguments: ["@\(rspFileString)"]) else {
+    guard try await processCall(executableURL: swiftWinRTExecUrl, arguments: ["@\(rspFileString)"])
+    else {
       throw DiagnosticError.FailedToSwiftWinRT("swift-winrt.exe failed to generate bindings")
     }
   }
@@ -165,29 +167,197 @@ public actor GenerateBindings {
     let generatedSourcesDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
       .appendingPathComponent(generatedDirString, isDirectory: true)
       .appendingPathComponent("Sources")
-    try FileManager.default.contentsOfDirectory(at: generatedSourcesDirUrl, includingPropertiesForKeys: [.isDirectoryKey])
-    var isDir: ObjCBool = false
-    // if FileManager.default.fileExists(atPath: generatedWin2DUrl.path, isDirectory: &isDir) {
-    //   let win2DResourceUrls = Bundle.module.urls(forResourcesWithExtension: nil, subdirectory: "Win2D")!
-    //   for case let win2DResourceUrl as URL in win2DResourceUrls {
-    //     let generatedWin2DUrl = generatedWin2DUrl.appendingPathComponent(win2DResourceUrl.lastPathComponent)
-    //     try FileManager.default.copyItem(at: win2DResourceUrl, to: generatedWin2DUrl)
-    //   }
-    // }
+    let dirs = try FileManager.default
+      .contentsOfDirectory(at: generatedSourcesDirUrl, includingPropertiesForKeys: nil)
+      .filter {
+        (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+      }
+    let projectionDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appendingPathComponent(winRTProjectionsDirString, isDirectory: true)
+    try? FileManager.default.removeItem(at: projectionDirUrl)
+    for dir in dirs {
+      switch dir.lastPathComponent {
+      case "CWinRT":
+        let projectionModuleUrl =
+          projectionDirUrl
+          .appendingPathComponent(dir.lastPathComponent, isDirectory: true)
+        try FileManager.default.copyItem(at: dir, to: projectionModuleUrl)
+      default:
+        let projectionModuleUrl =
+          projectionDirUrl
+          .appendingPathComponent(dir.lastPathComponent, isDirectory: true)
+          .appendingPathComponent("Generated", isDirectory: true)
+        try? FileManager.default.createDirectory(
+          at: projectionModuleUrl, withIntermediateDirectories: true)
+
+        let generatedResourceUrls = try FileManager.default.contentsOfDirectory(
+          at: dir, includingPropertiesForKeys: nil)
+        for atUrl in generatedResourceUrls {
+          let toUrl =
+            projectionModuleUrl
+            .appendingPathComponent(atUrl.lastPathComponent)
+          try FileManager.default.copyItem(at: atUrl, to: toUrl)
+        }
+      }
+    }
   }
 
   public func copyAssets(arch: WinArch) async throws {
-    let generatedDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-      .appendingPathComponent(generatedDirString, isDirectory: true)
-    let generatedWin2DUrl = generatedDirUrl.appendingPathComponent("Sources").appendingPathComponent("Win2D")
-    var isDir: ObjCBool = false
-    print(generatedWin2DUrl.path)
-    if FileManager.default.fileExists(atPath: generatedWin2DUrl.path, isDirectory: &isDir) {
-      let win2DResourceUrls = Bundle.module.urls(forResourcesWithExtension: nil, subdirectory: "Win2D")!
-      for case let win2DResourceUrl as URL in win2DResourceUrls {
-        let generatedWin2DUrl = generatedWin2DUrl.appendingPathComponent(win2DResourceUrl.lastPathComponent)
-        try FileManager.default.copyItem(at: win2DResourceUrl, to: generatedWin2DUrl)
+    let projectionDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appendingPathComponent(winRTProjectionsDirString, isDirectory: true)
+
+    // for Win2D and WinUI
+    let knownNeedAssets = ["Win2D", "WinUI", "WinAppSDK"]
+    var isDir: ObjCBool = true
+    for asset in knownNeedAssets {
+      // example: .\WinRTProjections\Sources\Win2D
+      let projectionAssetUrl = projectionDirUrl.appendingPathComponent(asset)
+      if FileManager.default.fileExists(atPath: projectionAssetUrl.path, isDirectory: &isDir) {
+        let assetResourceUrls = Bundle.module.urls(
+          forResourcesWithExtension: nil, subdirectory: asset)!
+        for case let assetResourceUrl as URL in assetResourceUrls {
+          let toUrl = projectionAssetUrl.appendingPathComponent(assetResourceUrl.lastPathComponent)
+          try FileManager.default.copyItem(at: assetResourceUrl, to: toUrl)
+        }
       }
     }
+
+    // for CWinAppSDK
+    do {
+      let asset = "CWinAppSDK"
+      let projectionAssetUrl = projectionDirUrl.appendingPathComponent(asset)
+      let assetResourceUrl = Bundle.module.url(forResource: asset, withExtension: nil)!
+      try FileManager.default.copyItem(at: assetResourceUrl, to: projectionAssetUrl)
+    }
+  }
+
+  public func writeProjectionPackageSwift() async throws {
+    let projectionDirUrl = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appendingPathComponent(winRTProjectionsDirString, isDirectory: true)
+    let dirs = try FileManager.default
+      .contentsOfDirectory(at: projectionDirUrl, includingPropertiesForKeys: nil)
+      .filter {
+        (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+      }
+    let products = dirs.map { ".library(name: \"\($0.lastPathComponent)\", targets: [\"\($0.lastPathComponent)\"])" }
+    let targets = dirs.compactMap {
+      switch $0.lastPathComponent {
+      case "CWinRT":
+        return """
+        .target(
+            name: "CWinRT",
+            path: "CWinRT",
+            linkerSettings: [
+                .unsafeFlags(["-nostartfiles"]),
+            ]
+        )
+        """
+      case "CWinAppSDK":
+        return """
+        .target(
+          name: "CWinAppSDK",
+          path: "CWinAppSDK",
+          resources: [
+            .copy("nuget/bin/Microsoft.WindowsAppRuntime.Bootstrap.dll"),
+          ],
+          linkerSettings: linkerSettings
+        )
+        """
+      case "UWP":
+        return """
+        .target(
+          name: "UWP",
+          dependencies: [
+            "CWinRT",
+            "WindowsFoundation",
+          ],
+          path: "UWP"
+        )
+        """
+      case "Win2D":
+        return """
+        .target(
+          name: "Win2D",
+          dependencies: [
+            "CWinRT",
+            "UWP",
+            "WindowsFoundation",
+            "WinUI",
+          ],
+          path: "Win2D",
+          resources: [
+            .copy("Resources/app.exe.manifest"),
+          ]
+        )
+        """
+      case "WinAppSDK":
+        return """
+        .target(
+          name: "WinAppSDK",
+          dependencies: [
+            "CWinRT",
+            "UWP",
+            "WindowsFoundation",
+            "CWinAppSDK"
+          ],
+          path: "WinAppSDK"
+        )
+        """
+      case "WindowsFoundation":
+        return """
+        .target(
+          name: "WindowsFoundation",
+          dependencies: [
+            "CWinRT",
+          ],
+          path: "WindowsFoundation"
+        )
+        """
+      case "WinUI":
+        return """
+        .target(
+          name: "WinUI",
+          dependencies: [
+            "CWinRT",
+            "UWP",
+            "WinAppSDK",
+            "WindowsFoundation",
+          ],
+          path: "WinUI"
+        )
+        """
+      default:
+        return nil
+      }
+    }
+    let swiftPackageUrl = projectionDirUrl
+      .appendingPathComponent("Package.swift")
+    let swiftPackageText = """
+      // swift-tools-version:6.0
+      import PackageDescription
+      import Foundation
+
+      let currentDirectory = Context.packageDirectory
+
+      let linkerSettings: [LinkerSetting] = [
+      /* Figure out magic incantation so we can delay load these dlls
+          .unsafeFlags(["-L\\(currentDirectory)/Sources/CWinAppSDK/nuget/lib"]),
+          .unsafeFlags(["-Xlinker" , "/DELAYLOAD:Microsoft.WindowsAppRuntime.Bootstrap.dll"]),
+      */
+      ]
+
+      let package = Package(
+        name: "WinRTProjections",
+        products: [
+          \(products.joined(separator: ",\n    "))
+        ],
+        targets: [
+          \(targets
+            .map { $0.replacingOccurrences(of: "\n", with: "\n    ") }
+            .joined(separator: ",\n    "))
+        ]
+      )
+      """
+    try swiftPackageText.write(to: swiftPackageUrl, atomically: true, encoding: .utf8)
   }
 }

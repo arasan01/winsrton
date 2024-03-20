@@ -10,4 +10,6 @@ DerivedData/
 projections.md
 generated/
 .packages/
+.generated/
 swift-winrt.rsp
+WinRTProjections/

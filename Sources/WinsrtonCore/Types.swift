@@ -34,8 +34,8 @@ extension Array where Element == NugetPackage {
   }
 }
 
-public enum WinArch: String {
-  case x86
+public enum WinArch: String, CaseIterable {
   case x64
+  case x86
   case arm64
 }
