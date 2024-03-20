@@ -1,6 +1,7 @@
 {
   "search.useIgnoreFiles": false,
   "files.exclude": {
-    "**/.build": true
+    "**/.build": true,
+    "**/.generated": true,
   }
 }
