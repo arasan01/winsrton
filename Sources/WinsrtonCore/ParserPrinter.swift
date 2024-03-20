@@ -44,13 +44,12 @@ struct ProjectionMarkdownParser: Parser {
         Parse(.memberwise(NugetPackage.init(id:version:))) {
           "- id:".utf8
           Whitespace()
-          Prefix { $0 != UInt8(ascii: "\n") }.map(.string)
-          "\n".utf8
+          Prefix { !$0.isNewline }.map(.string)
           Whitespace()
           "- version:".utf8
           Whitespace()
-          Prefix { $0 != UInt8(ascii: "\n") }.map(.string)
-          "\n".utf8
+          Prefix { !$0.isNewline }.map(.string)
+          Whitespace()
         }
       }
     }
@@ -106,8 +105,8 @@ struct ProjectionMarkdownParser: Parser {
         Parse(.memberwise(ModuleType.ignore)) {
           "- [ ]".utf8
           Whitespace()
-          Prefix { $0 != UInt8(ascii: "\n") }.map(.string)
-          "\n".utf8
+          Prefix { !$0.isNewline }.map(.string)
+          Whitespace()
         }
       }
     }
@@ -117,8 +116,8 @@ struct ProjectionMarkdownParser: Parser {
         Parse(.memberwise(ModuleType.include)) {
           "- [I]".utf8
           Whitespace()
-          Prefix { $0 != UInt8(ascii: "\n") }.map(.string)
-          "\n".utf8
+          Prefix { !$0.isNewline }.map(.string)
+          Whitespace()
         }
       }
     }
@@ -128,8 +127,8 @@ struct ProjectionMarkdownParser: Parser {
         Parse(.memberwise(ModuleType.exclude)) {
           "- [E]".utf8
           Whitespace()
-          Prefix { $0 != UInt8(ascii: "\n") }.map(.string)
-          "\n".utf8
+          Prefix { !$0.isNewline }.map(.string)
+          Whitespace()
         }
       }
     }
@@ -177,5 +176,11 @@ struct PackageParserPrinter: ParserPrinter {
       Whitespace().printing(" ".utf8)
       "/>".utf8
     }
+  }
+}
+
+extension UTF8.CodeUnit {
+  fileprivate var isNewline: Bool {
+    self == Self(ascii: "\n") || self == Self(ascii: "\r")
   }
 }
