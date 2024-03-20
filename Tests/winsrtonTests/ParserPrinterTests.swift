@@ -24,13 +24,13 @@ let projectionString = """
 # Dependencies
 
 - id: swift-winrt
-  version: 0.5.0
+  - version: 0.5.0
 - id: Microsoft.Windows.SDK.Contracts
-  version: 10.0.18362.2005
+  - version: 10.0.18362.2005
 - id: Microsoft.WindowsAppSDK
-  version: 1.5.240205001-preview1
+  - version: 1.5.240205001-preview1
 - id: Microsoft.Graphics.Win2D
-  version: 1.1.1
+  - version: 1.1.1
 
 # Modules
 
