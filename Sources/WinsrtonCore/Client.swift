@@ -353,7 +353,12 @@ public actor GenerateBindings {
         (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
       }
     let products = dirs.map {
-      ".library(name: \"\($0.lastPathComponent)\", type: .dynamic, targets: [\"\($0.lastPathComponent)\"])"
+      switch $0.lastPathComponent {
+      case "CWinAppSDK":
+        return ".library(name: \"\($0.lastPathComponent)\", targets: [\"\($0.lastPathComponent)\"])"
+      default:
+        return ".library(name: \"\($0.lastPathComponent)\", type: .dynamic, targets: [\"\($0.lastPathComponent)\"])"
+      }
     }
     let targets = dirs.compactMap {
       switch $0.lastPathComponent {
